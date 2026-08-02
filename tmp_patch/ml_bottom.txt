@@ -1,0 +1,38 @@
+          </div>
+        </div>
+      )}
+
+      {/* 默认值 */}
+
+      {/* 默认值 */}
+      <div className="border border-slate-200 rounded-md p-3 space-y-2 bg-white">
+        <div className="flex items-center gap-2 text-xs font-semibold text-slate-600">
+          <FileText className="w-3.5 h-3.5" />
+          默认值
+        </div>
+        {field.type === 'toggle' ? (
+          <label className="flex items-center gap-2 text-sm text-slate-600">
+            <input
+              type="checkbox"
+              className="rounded border-slate-300 text-teal-600 focus:ring-teal-500"
+              checked={!!field.defaultValue}
+              onChange={(e) => update({ defaultValue: e.target.checked })}
+            />
+            默认开启
+          </label>
+        ) : field.type === 'checkbox' ? (
+          <div className="text-xs text-slate-400">
+            多选默认值请在选项中配置（暂不支持）
+          </div>
+        ) : (
+          <Input
+            className="h-8 text-sm"
+            placeholder="默认值..."
+            value={String(field.defaultValue ?? '')}
+            onChange={(e) => update({ defaultValue: e.target.value })}
+          />
+        )}
+      </div>
+    </div>
+  )
+}
