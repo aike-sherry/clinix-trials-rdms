@@ -51,9 +51,17 @@ export default function ManagerLayout() {
   const isProjectsPage = location.pathname === '/manager/projects'
   const isProgressPage = location.pathname === '/manager/progress'
   const isPatientsPage = location.pathname === '/manager/patients'
+  const isDataPage = location.pathname === '/manager/data'
 
   const search = searchParams.get('search') || ''
   const selectedProjectNo = searchParams.get('projectNo') || 'all'
+
+  // 数据管理页：项目必选（默认取第一个已设计 CRF 的项目）
+  const dataDefaultProjectNo =
+    (projects.find((p) => p.crfModules.length > 0) ?? projects[0])?.projectNo ?? 'all'
+  const resolvedProjectNo = isDataPage
+    ? (projects.some((p) => p.projectNo === selectedProjectNo) ? selectedProjectNo : dataDefaultProjectNo)
+    : selectedProjectNo
 
   const setSearch = (value: string) => {
     const newParams = new URLSearchParams(searchParams)
@@ -125,23 +133,25 @@ export default function ManagerLayout() {
           </>
         )}
 
-        {(isProgressPage || isPatientsPage) && (
-          <Select value={selectedProjectNo} onValueChange={setSelectedProjectNo}>
+        {(isProgressPage || isPatientsPage || isDataPage) && (
+          <Select value={resolvedProjectNo} onValueChange={setSelectedProjectNo}>
             <SelectTrigger className="w-44 bg-slate-50 border-slate-200">
               <SelectValue placeholder="全部研究" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">
-                <div className="flex items-center gap-2">
-                  <span>全部研究</span>
-                  {selectedProjectNo === 'all' && <Check className="w-3.5 h-3.5 text-sky-500" />}
-                </div>
-              </SelectItem>
+              {!isDataPage && (
+                <SelectItem value="all">
+                  <div className="flex items-center gap-2">
+                    <span>全部研究</span>
+                    {selectedProjectNo === 'all' && <Check className="w-3.5 h-3.5 text-sky-500" />}
+                  </div>
+                </SelectItem>
+              )}
               {projects.map((p) => (
                 <SelectItem key={p.id} value={p.projectNo}>
                   <div className="flex items-center gap-2">
                     <span>{p.projectNo}</span>
-                    {selectedProjectNo === p.projectNo && <Check className="w-3.5 h-3.5 text-sky-500" />}
+                    {resolvedProjectNo === p.projectNo && <Check className="w-3.5 h-3.5 text-sky-500" />}
                   </div>
                 </SelectItem>
               ))}

@@ -4,7 +4,7 @@ import { getDemoSeed, getDemoProjects } from '@/data/demoSeed'
 
 const STORAGE_KEY = 'clini_x_rdms_data'
 const VERSION_KEY = 'clini_x_rdms_version'
-const DATA_VERSION = '3' // 数据版本号，变更时自动重置缓存
+const DATA_VERSION = '5' // 数据版本号，变更时自动重置缓存
 
 
 function genId() {

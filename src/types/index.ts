@@ -149,13 +149,19 @@ export interface Visit {
 
 // ==================== 项目（课题/研究）====================
 
+export interface Center {
+  id: string
+  name: string              // 中心名称，如 "上海瑞金医院"
+}
+
 export interface Project {
   id: string
   projectNo: string              // 项目编号，如 ON101CLCT01
   name: string                   // 项目名称
   sponsor?: string               // 申办方
   principalInvestigator: string  // 主要研究者
-  researchCenter: string         // 研究中心
+  researchCenter: string         // 研究中心（牵头中心）
+  centers?: Center[]             // 参与中心列表（多中心研究）
   department?: string            // 研究科室
   status: ProjectStatus
   startDate?: string
@@ -178,6 +184,7 @@ export interface Project {
 export interface Patient {
   id: string
   projectId: string
+  centerId?: string               // 所属中心 ID
   screeningNo: string            // 筛选序号，如 01
   screeningId: string            // 筛选编号，如 001
   randomizationId?: string       // 随机编号，如 CP101

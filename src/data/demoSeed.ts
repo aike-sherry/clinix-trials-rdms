@@ -68,6 +68,7 @@ const fSelect = (label: string, name: string, order: number, options: [string, s
 
 const GENDER_OPTS: [string, string][] = [['男', 'male'], ['女', 'female']]
 const SEVERITY_OPTS: [string, string][] = [['轻度', 'mild'], ['中度', 'moderate'], ['重度', 'severe']]
+const RELATION_OPTS: [string, string][] = [['有关', 'related'], ['可能有关', 'possibly_related'], ['可能无关', 'possibly_unrelated'], ['无关', 'unrelated']]
 const OUTCOME_OPTS: [string, string][] = [['恢复', 'recovered'], ['恢复伴后遗症', 'recovered_with_sequelae'], ['未恢复', 'not_recovered']]
 
 // ---------- 模块模板（按项目生成独立 ID） ----------
@@ -130,8 +131,9 @@ function aeModule(projectId: string, id: string, order: number): CRFModule {
       fText('事件名称', 'eventName', 1, true),
       fDate('发生日期', 'onsetDate', 2, true),
       fSelect('严重程度', 'severity', 3, SEVERITY_OPTS),
-      fTextarea('处理措施', 'actionTaken', 4),
-      fSelect('转归', 'outcome', 5, OUTCOME_OPTS),
+      fSelect('与试验药物关系', 'drugRelation', 4, RELATION_OPTS),
+      fTextarea('处理措施', 'actionTaken', 5),
+      fSelect('转归', 'outcome', 6, OUTCOME_OPTS),
     ],
   }
 }
@@ -258,6 +260,30 @@ function p5Visits(): Visit[] {
   ]
 }
 
+// ---------- 中心 ----------
+
+const P1_CENTERS = [
+  { id: 'ctr_p1_rj', name: '上海瑞金医院' },
+  { id: 'ctr_p1_zs', name: '上海中山医院' },
+  { id: 'ctr_p1_zxy', name: '上海中西医结合医院' },
+]
+const P2_CENTERS = [
+  { id: 'ctr_p2_xh', name: '北京协和医院' },
+  { id: 'ctr_p2_hs', name: '上海华山医院' },
+  { id: 'ctr_p2_xy', name: '中南大学湘雅医院' },
+]
+const P3_CENTERS = [
+  { id: 'ctr_p3_dj', name: '上海第九人民医院' },
+  { id: 'ctr_p3_ch', name: '上海长海医院' },
+]
+const P4_CENTERS = [
+  { id: 'ctr_p4_gam', name: '广安门医院' },
+  { id: 'ctr_p4_xy2', name: '西苑医院' },
+]
+const P5_CENTERS = [
+  { id: 'ctr_p5_jdx', name: '江苏大学附属医院' },
+]
+
 // ---------- 项目列表 ----------
 
 export function getDemoProjects(): Project[] {
@@ -266,7 +292,7 @@ export function getDemoProjects(): Project[] {
       id: P1, projectNo: 'CN101CLCT06',
       name: '软坚清脉法治疗下肢动脉硬化闭塞症的多中心临床研究',
       sponsor: '上海瑞金医院 / 海和药物', principalInvestigator: '张慈',
-      researchCenter: '上海瑞金医院', department: '内分泌科',
+      researchCenter: '上海瑞金医院', centers: P1_CENTERS, department: '内分泌科',
       status: 'study_started', startDate: '2025-03-01', endDate: '2026-12-31',
       targetEnrollment: 120, budget: 500000,
       description: '评估软坚清脉法治疗下肢动脉硬化闭塞症的临床疗效和安全性',
@@ -278,7 +304,7 @@ export function getDemoProjects(): Project[] {
       id: P2, projectNo: 'CN102CLCT11',
       name: '新型 GLP-1 受体激动剂治疗 2 型糖尿病的 III 期临床研究',
       sponsor: '海和药物', principalInvestigator: '张慈',
-      researchCenter: '北京协和医院', department: '内分泌科',
+      researchCenter: '北京协和医院', centers: P2_CENTERS, department: '内分泌科',
       status: 'study_started', startDate: '2025-01-15', endDate: '2026-06-30',
       targetEnrollment: 200, budget: 800000,
       description: '评估新型 GLP-1 受体激动剂治疗 2 型糖尿病患者的有效性和安全性',
@@ -290,7 +316,7 @@ export function getDemoProjects(): Project[] {
       id: P3, projectNo: 'CN103CLCT02',
       name: '烧伤创面修复新型敷料的随机对照临床试验',
       sponsor: '上海烧伤研究所', principalInvestigator: '李华',
-      researchCenter: '上海第九人民医院', department: '烧伤整形科',
+      researchCenter: '上海第九人民医院', centers: P3_CENTERS, department: '烧伤整形科',
       status: 'ethics_review', startDate: '2025-06-01', endDate: '2026-12-31',
       targetEnrollment: 80, budget: 350000,
       description: '比较新型生物敷料与传统敷料在烧伤创面修复中的疗效差异',
@@ -302,7 +328,7 @@ export function getDemoProjects(): Project[] {
       id: 'proj_cn104', projectNo: 'CN104CLCT09',
       name: '中药复方治疗慢性心力衰竭的临床疗效评价研究',
       sponsor: '中国中医科学院', principalInvestigator: '王建国',
-      researchCenter: '广安门医院', department: '心血管科',
+      researchCenter: '广安门医院', centers: P4_CENTERS, department: '心血管科',
       status: 'contract_signed', startDate: '2025-09-01', endDate: '2027-03-31',
       targetEnrollment: 150, budget: 600000,
       description: '评价中药复方在慢性心力衰竭患者中的疗效和安全性',
@@ -313,7 +339,7 @@ export function getDemoProjects(): Project[] {
       id: P5, projectNo: 'CN105CLCT03',
       name: '穴位贴敷治疗慢性阻塞性肺疾病的临床观察研究',
       sponsor: '江苏大学附属医院', principalInvestigator: '陈明远',
-      researchCenter: '江苏大学附属医院', department: '呼吸与危重症医学科',
+      researchCenter: '江苏大学附属医院', centers: P5_CENTERS, department: '呼吸与危重症医学科',
       status: 'study_closed', startDate: '2023-06-01', endDate: '2025-05-31',
       targetEnrollment: 60, budget: 200000,
       description: '观察穴位贴敷联合常规治疗对慢性阻塞性肺疾病稳定期患者的疗效',
@@ -339,6 +365,7 @@ function buildPatients(
   randPrefix: string,
   specs: PatientSpec[],
   initialsOffset: number,
+  centerIds: string[],
 ): Patient[] {
   return specs.map((spec, i) => {
     const no = String(i + 1).padStart(2, '0')
@@ -353,6 +380,7 @@ function buildPatients(
     return {
       id: `pat_${projectId}_${no}`,
       projectId,
+      centerId: centerIds.length > 0 ? centerIds[i % centerIds.length] : undefined,
       screeningNo: no,
       screeningId: String(i + 1).padStart(3, '0'),
       randomizationId: enrolled && spec.status !== 'withdrawn' ? `${randPrefix}${String(i + 1).padStart(3, '0')}` : undefined,
@@ -395,9 +423,9 @@ export function getDemoPatients(): Patient[] {
   ]
   const p5Specs: PatientSpec[] = Array.from({ length: 8 }, () => ({ status: 'completed' as const, visitIdx: 1 }))
   return [
-    ...buildPatients(P1, '2025-03-01', 'RJ', p1Specs, 0),
-    ...buildPatients(P2, '2025-01-15', 'GLP', p2Specs, 9),
-    ...buildPatients(P5, '2023-06-01', 'XA', p5Specs, 17),
+    ...buildPatients(P1, '2025-03-01', 'RJ', p1Specs, 0, P1_CENTERS.map((c) => c.id)),
+    ...buildPatients(P2, '2025-01-15', 'GLP', p2Specs, 9, P2_CENTERS.map((c) => c.id)),
+    ...buildPatients(P5, '2023-06-01', 'XA', p5Specs, 17, P5_CENTERS.map((c) => c.id)),
   ]
 }
 
@@ -442,6 +470,7 @@ function fieldValue(name: string, type: string, options: { value: string }[] | u
     case 'eventName': return pick(AE_NAMES)
     case 'onsetDate': return visitDate
     case 'severity': return pick(['mild', 'mild', 'moderate'])
+    case 'drugRelation': return pick(['related', 'related', 'possibly_related', 'possibly_unrelated', 'unrelated', 'unrelated'])
     case 'outcome': return 'recovered'
     default:
       if (type === 'select' || type === 'radio') return options?.length ? pick(options).value : ''

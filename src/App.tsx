@@ -19,6 +19,7 @@ import ManagerProgress from './pages/manager/Progress'
 
 import ManagerPatients from './pages/manager/Patients'
 import ManagerAccount from './pages/manager/Account'
+import ManagerDataManagement from './pages/manager/DataManagement'
 
 // Admin pages (reuse existing admin pages)
 import AdminHome from './pages/admin/Home'
@@ -71,7 +72,7 @@ export default function App() {
           </Route>
           <Route path="/manager/progress" element={<ManagerProgress />} />
           <Route path="/manager/patients" element={<ManagerPatients />} />
-          <Route path="/manager/data" element={<Placeholder title="数据管理" />} />
+          <Route path="/manager/data" element={<ManagerDataManagement />} />
           <Route path="/manager/statistics" element={<Placeholder title="统计分析" />} />
           <Route path="/manager/account" element={<ManagerAccount />} />
         </Route>
