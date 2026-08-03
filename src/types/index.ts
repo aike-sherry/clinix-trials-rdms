@@ -2,11 +2,51 @@
 // CLINI X TRIALS-RDMS 核心类型定义
 // ============================================================
 
+// ==================== 用户与权限 ====================
+
+export type UserRole = 'manager' | 'admin' | 'data_entry'
+
+export interface User {
+  id: string
+  username: string
+  name: string
+  role: UserRole
+  email?: string
+  phone?: string
+  department?: string
+  avatar?: string
+  createdAt: string
+  updatedAt: string
+  isActive: boolean
+}
+
+/** 项目授权：管理人员将项目授权给数据录入人员 */
+export interface ProjectPermission {
+  id: string
+  projectId: string
+  userId: string        // 被授权的数据录入人员ID
+  grantedBy: string     // 授权人（管理人员ID）
+  grantedAt: string
+  canCreatePatient: boolean
+  canEditData: boolean
+  canViewData: boolean
+}
+
 // ==================== 通用 ====================
 
 export type Gender = 'male' | 'female'
 
-export type ProjectStatus = 'pending' | 'active' | 'completed' | 'suspended'
+export type ProjectStatus =
+  | 'proposal_review'   // 立项审核
+  | 'contract_signed'   // 合同签署
+  | 'ethics_review'     // 伦理审核
+  | 'study_started'     // 研究启动
+  | 'study_closed'      // 研究关闭
+  | 'suspended'         // 暂停
+  // 兼容旧数据
+  | 'pending'
+  | 'active'
+  | 'completed'
 
 export type PatientStatus = 'screening' | 'enrolled' | 'treatment' | 'completed' | 'withdrawn' | 'lost'
 
@@ -26,10 +66,23 @@ export type FieldType =
   | 'toggle'
   | 'label'
   | 'table'
+  | 'scale'
+  | 'numberRange'
+  | 'signature'
 
 export interface FieldOption {
   label: string
   value: string
+  /** 选择此选项后是否需要额外输入补充信息 */
+  hasExtraInput?: boolean
+  extraInputLabel?: string
+  extraInputPlaceholder?: string
+}
+
+export interface FieldCondition {
+  fieldName: string
+  operator: 'equals' | 'notEquals' | 'contains' | 'notEmpty'
+  value?: string
 }
 
 export interface ValidationRule {
@@ -51,10 +104,21 @@ export interface CRFField {
   helpText?: string
   options?: FieldOption[]
   validation?: ValidationRule
+  /** 条件显示：当满足此条件时字段才显示 */
+  showIf?: FieldCondition
   defaultValue?: unknown
   order: number
+  /** 数字类型专用：单位（如：mmHg、kg、年） */
+  unit?: string
   /** 表格类型专用：表格列定义 */
   columns?: CRFField[]
+  /** 量表类型专用：量表配置 */
+  scaleConfig?: {
+    min: number
+    max: number
+    step: number
+    labels?: { value: number; label: string }[]
+  }
 }
 
 // ==================== CRF 模块 ====================
@@ -101,6 +165,7 @@ export interface Project {
   budget?: number                // 预算
   createdAt: string
   updatedAt: string
+  createdBy?: string             // 创建者（管理人员ID）
   // CRF 设计
   visits: Visit[]
   crfModules: CRFModule[]
@@ -126,6 +191,7 @@ export interface Patient {
   nextVisit?: string             // 下次访视编码
   createdAt: string
   updatedAt: string
+  createdBy?: string             // 录入人员ID
 }
 
 // ==================== 访视数据 ====================
@@ -143,15 +209,6 @@ export interface VisitData {
   createdBy?: string
 }
 
-// ==================== 存储 ====================
-
-export interface AppStorage {
-  projects: Project[]
-  patients: Patient[]
-  visitData: VisitData[]
-  moduleLibrary: ModuleLibraryItem[]
-}
-
 // ==================== 模块库 ====================
 
 export interface ModuleLibraryItem {
@@ -163,4 +220,17 @@ export interface ModuleLibraryItem {
   isSystem: boolean     // 系统预置，不可删除
   createdAt: string
   updatedAt: string
+}
+
+// ==================== 存储 ====================
+
+export interface AppStorage {
+  users: User[]
+  projects: Project[]
+  patients: Patient[]
+  visitData: VisitData[]
+  moduleLibrary: ModuleLibraryItem[]
+  projectPermissions: ProjectPermission[]
+  // 当前登录用户（session级别，不持久化到localStorage）
+  currentUser?: User
 }

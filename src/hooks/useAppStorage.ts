@@ -1,7 +1,11 @@
 import { useState, useCallback } from 'react'
-import type { AppStorage, Project, Patient, VisitData, ModuleLibraryItem, CRFField } from '@/types'
+import type { AppStorage, Project, Patient, VisitData, ModuleLibraryItem, CRFField, User, ProjectPermission } from '@/types'
+import { getDemoSeed, getDemoProjects } from '@/data/demoSeed'
 
 const STORAGE_KEY = 'clini_x_rdms_data'
+const VERSION_KEY = 'clini_x_rdms_version'
+const DATA_VERSION = '3' // 数据版本号，变更时自动重置缓存
+
 
 function genId() {
   return Math.random().toString(36).slice(2) + Date.now().toString(36)
@@ -117,6 +121,20 @@ function getDefaultModules(): ModuleLibraryItem[] {
 
 function getInitialData(): AppStorage {
   try {
+    // 版本号检查：不匹配则重置缓存（保留登录会话）
+    const storedVersion = localStorage.getItem(VERSION_KEY)
+    let preservedUser: AppStorage['currentUser']
+    if (storedVersion !== DATA_VERSION) {
+      try {
+        const oldRaw = localStorage.getItem(STORAGE_KEY)
+        if (oldRaw) preservedUser = (JSON.parse(oldRaw) as AppStorage).currentUser
+      } catch {
+        // ignore
+      }
+      localStorage.removeItem(STORAGE_KEY)
+      localStorage.setItem(VERSION_KEY, DATA_VERSION)
+    }
+
     const raw = localStorage.getItem(STORAGE_KEY)
     if (raw) {
       const parsed = JSON.parse(raw) as AppStorage
@@ -125,18 +143,41 @@ function getInitialData(): AppStorage {
         parsed.moduleLibrary = getDefaultModules()
         localStorage.setItem(STORAGE_KEY, JSON.stringify(parsed))
       }
+      // 向后兼容：旧数据没有 users / projectPermissions / projects / patients / visitData
+      if (!parsed.users) parsed.users = []
+      if (!parsed.projectPermissions) parsed.projectPermissions = []
+      if (!parsed.projects || parsed.projects.length === 0) parsed.projects = getDemoProjects()
+      if (!parsed.patients) parsed.patients = []
+      if (!parsed.visitData) parsed.visitData = []
       return parsed
     }
+    const demo = getDemoSeed()
+    const data: AppStorage = {
+      users: demo.users,
+      projects: demo.projects,
+      patients: demo.patients,
+      visitData: demo.visitData,
+      moduleLibrary: getDefaultModules(),
+      projectPermissions: demo.projectPermissions,
+      ...(preservedUser ? { currentUser: preservedUser } : {}),
+    }
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(data))
+    localStorage.setItem(VERSION_KEY, DATA_VERSION)
+    return data
   } catch {
     // ignore
   }
+  const demo = getDemoSeed()
   const data: AppStorage = {
-    projects: [],
-    patients: [],
-    visitData: [],
+    users: demo.users,
+    projects: demo.projects,
+    patients: demo.patients,
+    visitData: demo.visitData,
     moduleLibrary: getDefaultModules(),
+    projectPermissions: demo.projectPermissions,
   }
   localStorage.setItem(STORAGE_KEY, JSON.stringify(data))
+  localStorage.setItem(VERSION_KEY, DATA_VERSION)
   return data
 }
 
@@ -228,6 +269,65 @@ export function useAppStorage() {
         }
       } else {
         next = { ...prev, visitData: [...prev.visitData, vd] }
+      }
+      save(next)
+      return next
+    })
+  }, [])
+
+  // ========== User ==========
+  const saveUser = useCallback((user: User) => {
+    setData((prev) => {
+      const exists = prev.users.find((u) => u.id === user.id)
+      let next: AppStorage
+      if (exists) {
+        next = {
+          ...prev,
+          users: prev.users.map((u) => (u.id === user.id ? user : u)),
+        }
+      } else {
+        next = { ...prev, users: [...prev.users, user] }
+      }
+      save(next)
+      return next
+    })
+  }, [])
+
+  const deleteUser = useCallback((id: string) => {
+    setData((prev) => {
+      const next = {
+        ...prev,
+        users: prev.users.filter((u) => u.id !== id),
+        projectPermissions: prev.projectPermissions.filter((p) => p.userId !== id),
+      }
+      save(next)
+      return next
+    })
+  }, [])
+
+  // ========== Project Permission ==========
+  const saveProjectPermission = useCallback((perm: ProjectPermission) => {
+    setData((prev) => {
+      const exists = prev.projectPermissions.find((p) => p.id === perm.id)
+      let next: AppStorage
+      if (exists) {
+        next = {
+          ...prev,
+          projectPermissions: prev.projectPermissions.map((p) => (p.id === perm.id ? perm : p)),
+        }
+      } else {
+        next = { ...prev, projectPermissions: [...prev.projectPermissions, perm] }
+      }
+      save(next)
+      return next
+    })
+  }, [])
+
+  const deleteProjectPermission = useCallback((id: string) => {
+    setData((prev) => {
+      const next = {
+        ...prev,
+        projectPermissions: prev.projectPermissions.filter((p) => p.id !== id),
       }
       save(next)
       return next
@@ -336,16 +436,22 @@ export function useAppStorage() {
   }, [])
 
   return {
+    users: data.users,
     projects: data.projects,
     patients: data.patients,
     visitData: data.visitData,
     moduleLibrary: data.moduleLibrary,
+    projectPermissions: data.projectPermissions,
     refresh,
     saveProject,
     deleteProject,
     savePatient,
     deletePatient,
     saveVisitData,
+    saveUser,
+    deleteUser,
+    saveProjectPermission,
+    deleteProjectPermission,
     saveModuleLibraryItem,
     deleteModuleLibraryItem,
     addModuleLibraryField,

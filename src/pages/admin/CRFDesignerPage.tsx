@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import CRFFormRenderer from '@/components/CRFFormRenderer'
 import {
-  Plus, Trash2, Pencil, ChevronDown, ChevronRight,
+  Plus, Trash2, Pencil, ChevronDown, ChevronRight, ChevronLeft,
   Hash, Type, Calendar, ListChecks, ToggleLeft, AlignLeft, FileText,
   FlaskConical, Eye, Package, Copy, Check
 } from 'lucide-react'
@@ -128,13 +128,16 @@ function CRFDesignerCore({ project, onSave }: { project: Project; onSave: (p: Pr
   const [selectedVisitId, setSelectedVisitId] = useState<string>('')
   const [selectedModuleId, setSelectedModuleId] = useState<string>('')
   const [expandedVisits, setExpandedVisits] = useState<Set<string>>(new Set(project.visits.map((v) => v.id)))
-  const [showPreview, setShowPreview] = useState(false)
   const [showFieldDialog, setShowFieldDialog] = useState(false)
   const [editingField, setEditingField] = useState<CRFField | null>(null)
   const [showVisitDialog, setShowVisitDialog] = useState(false)
   const [editingVisit, setEditingVisit] = useState<Visit | null>(null)
   const [showModuleDialog, setShowModuleDialog] = useState(false)
   const [editingModule, setEditingModule] = useState<CRFModule | null>(null)
+  
+  // 预览面板
+  const [previewWidth, setPreviewWidth] = useState(420)
+  const [previewCollapsed, setPreviewCollapsed] = useState(false)
   
   // 模块库导入弹窗
   const [showLibraryDialog, setShowLibraryDialog] = useState(false)
@@ -248,7 +251,7 @@ function CRFDesignerCore({ project, onSave }: { project: Project; onSave: (p: Pr
       projectId: project.id,
       name: libModule.name,
       description: libModule.description,
-      fields: libModule.fields.map((f) => ({ ...f, id: genId() })), // 复制字段，生成新 ID
+      fields: libModule.fields.map((f) => ({ ...f, id: genId() })),
       order: project.crfModules.length + modulesToImport.indexOf(libModule),
     }))
 
@@ -347,6 +350,25 @@ function CRFDesignerCore({ project, onSave }: { project: Project; onSave: (p: Pr
         m.id === selectedModuleId ? { ...m, fields: arr.map((f, i) => ({ ...f, order: i })) } : m
       ),
     }))
+  }
+
+  // ---------- 预览面板拖拽调整宽度 ----------
+  const handlePreviewResizeStart = (e: React.MouseEvent) => {
+    e.preventDefault()
+    const startX = e.clientX
+    const startWidth = previewWidth
+    const onMove = (e: MouseEvent) => {
+      e.preventDefault()
+      const delta = startX - e.clientX
+      const newWidth = Math.max(280, Math.min(700, startWidth + delta))
+      setPreviewWidth(newWidth)
+    }
+    const onUp = () => {
+      document.removeEventListener('mousemove', onMove)
+      document.removeEventListener('mouseup', onUp)
+    }
+    document.addEventListener('mousemove', onMove)
+    document.addEventListener('mouseup', onUp)
   }
 
   return (
@@ -507,92 +529,163 @@ function CRFDesignerCore({ project, onSave }: { project: Project; onSave: (p: Pr
         </div>
       </aside>
 
-      {/* ========== 右侧：编辑区 ========== */}
-      <main className="flex-1 flex flex-col overflow-hidden bg-slate-50">
-        {selectedModule ? (
-          <>
-            {/* 顶部工具栏 */}
-            <div className="px-5 py-3 bg-white border-b border-slate-200 flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <h2 className="font-semibold text-slate-800">{selectedModule.name}</h2>
-                <Badge variant="outline" className="text-xs">{selectedModule.fields.length} 字段</Badge>
-                {selectedVisit && (
-                  <span className="text-xs text-slate-400">所属访视: {selectedVisit.name}</span>
+      {/* ========== 右侧：编辑区 + 预览 ========== */}
+      <div className="flex-1 flex overflow-hidden">
+        <main className="flex-1 flex flex-col overflow-hidden bg-slate-50">
+          {selectedModule ? (
+            <>
+              {/* 顶部工具栏 */}
+              <div className="px-5 py-3 bg-white border-b border-slate-200 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <h2 className="font-semibold text-slate-800">{selectedModule.name}</h2>
+                  <Badge variant="outline" className="text-xs">{selectedModule.fields.length} 字段</Badge>
+                  {selectedVisit && (
+                    <span className="text-xs text-slate-400">所属访视: {selectedVisit.name}</span>
+                  )}
+                </div>
+              </div>
+
+              {/* 字段类型快捷添加 */}
+              <div className="px-5 py-2 bg-white border-b border-slate-100 flex items-center gap-1 flex-wrap">
+                <span className="text-xs text-slate-400 mr-2">添加字段:</span>
+                {Object.keys(FIELD_TYPE_LABELS).map((type) => (
+                  <Button key={type} variant="outline" size="sm" className="h-7 text-xs" onClick={() => addField(type)}>
+                    {FIELD_TYPE_ICONS[type]} <span className="ml-1">{FIELD_TYPE_LABELS[type]}</span>
+                  </Button>
+                ))}
+              </div>
+
+              {/* 字段列表 */}
+              <div className="flex-1 overflow-y-auto p-5">
+                {[...selectedModule.fields].sort((a, b) => a.order - b.order).map((f, fi) => (
+                  <div key={f.id} className="bg-white rounded-lg border border-slate-200 p-4 mb-3 hover:shadow-sm transition-shadow">
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center gap-2">
+                        <span className="text-slate-400">{FIELD_TYPE_ICONS[f.type]}</span>
+                        <span className="font-medium text-sm">{f.label}</span>
+                        <span className="text-xs text-slate-400 font-mono">{f.name}</span>
+                        {f.validation?.required && <Badge variant="outline" className="text-[10px] h-4 text-red-500 border-red-200">必填</Badge>}
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <Button variant="ghost" size="icon" className="w-6 h-6" onClick={() => moveField(fi, -1)} disabled={fi === 0}>
+                          <ChevronRight className="w-3 h-3 rotate-180" />
+                        </Button>
+                        <Button variant="ghost" size="icon" className="w-6 h-6" onClick={() => moveField(fi, 1)} disabled={fi === selectedModule.fields.length - 1}>
+                          <ChevronRight className="w-3 h-3" />
+                        </Button>
+                        <Button variant="ghost" size="icon" className="w-6 h-6" onClick={() => { setEditingField(f); setShowFieldDialog(true) }}>
+                          <Pencil className="w-3 h-3" />
+                        </Button>
+                        <Button variant="ghost" size="icon" className="w-6 h-6 text-red-500" onClick={() => deleteField(f.id)}>
+                          <Trash2 className="w-3 h-3" />
+                        </Button>
+                      </div>
+                    </div>
+
+                    {/* 字段预览 */}
+                    <div className="bg-slate-50 rounded-md p-3">
+                      <CRFFormRenderer sections={[]} fields={[f]} readOnly />
+                    </div>
+                  </div>
+                ))}
+
+                {selectedModule.fields.length === 0 && (
+                  <div className="text-center py-16">
+                    <p className="text-slate-400 text-sm">该模块暂无字段，点击上方按钮添加</p>
+                  </div>
                 )}
               </div>
-              <div className="flex items-center gap-2">
-                <Button variant="outline" size="sm" onClick={() => setShowPreview(true)}>
-                  <Eye className="w-3.5 h-3.5 mr-1" /> 预览
-                </Button>
+            </>
+          ) : selectedVisit ? (
+            <div className="flex-1 flex items-center justify-center">
+              <div className="text-center">
+                <p className="text-slate-500 mb-2">已选择访视: {selectedVisit.name}</p>
+                <p className="text-xs text-slate-400">请从左侧展开访视并选择一个模块进行编辑</p>
               </div>
             </div>
+          ) : (
+            <div className="flex-1 flex items-center justify-center">
+              <div className="text-center">
+                <p className="text-slate-500">请从左侧选择一个访视或模块</p>
+              </div>
+            </div>
+          )}
+        </main>
 
-            {/* 字段类型快捷添加 */}
-            <div className="px-5 py-2 bg-white border-b border-slate-100 flex items-center gap-1 flex-wrap">
-              <span className="text-xs text-slate-400 mr-2">添加字段:</span>
-              {Object.keys(FIELD_TYPE_LABELS).map((type) => (
-                <Button key={type} variant="outline" size="sm" className="h-7 text-xs" onClick={() => addField(type)}>
-                  {FIELD_TYPE_ICONS[type]} <span className="ml-1">{FIELD_TYPE_LABELS[type]}</span>
+        {/* ========== 预览侧栏（仅当选中模块时显示） ========== */}
+        {selectedModule && (
+          <>
+            {/* 拖拽分割条 */}
+            {!previewCollapsed && (
+              <div
+                className="w-1.5 cursor-col-resize hover:bg-teal-400/40 active:bg-teal-400 transition-colors flex-shrink-0"
+                onMouseDown={handlePreviewResizeStart}
+                title="拖拽调整预览面板宽度"
+              />
+            )}
+
+            {/* 预览面板 */}
+            {previewCollapsed ? (
+              <div className="w-9 border-l border-slate-100 bg-slate-50 flex flex-col items-center py-2 flex-shrink-0">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="w-7 h-7 text-slate-400 hover:text-teal-600"
+                  onClick={() => setPreviewCollapsed(false)}
+                  title="展开预览"
+                >
+                  <ChevronLeft className="w-4 h-4" />
                 </Button>
-              ))}
-            </div>
-
-            {/* 字段列表 */}
-            <div className="flex-1 overflow-y-auto p-5">
-              {[...selectedModule.fields].sort((a, b) => a.order - b.order).map((f, fi) => (
-                <div key={f.id} className="bg-white rounded-lg border border-slate-200 p-4 mb-3 hover:shadow-sm transition-shadow">
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center gap-2">
-                      <span className="text-slate-400">{FIELD_TYPE_ICONS[f.type]}</span>
-                      <span className="font-medium text-sm">{f.label}</span>
-                      <span className="text-xs text-slate-400 font-mono">{f.name}</span>
-                      {f.validation?.required && <Badge variant="outline" className="text-[10px] h-4 text-red-500 border-red-200">必填</Badge>}
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <Button variant="ghost" size="icon" className="w-6 h-6" onClick={() => moveField(fi, -1)} disabled={fi === 0}>
-                        <ChevronRight className="w-3 h-3 rotate-180" />
-                      </Button>
-                      <Button variant="ghost" size="icon" className="w-6 h-6" onClick={() => moveField(fi, 1)} disabled={fi === selectedModule.fields.length - 1}>
-                        <ChevronRight className="w-3 h-3" />
-                      </Button>
-                      <Button variant="ghost" size="icon" className="w-6 h-6" onClick={() => { setEditingField(f); setShowFieldDialog(true) }}>
-                        <Pencil className="w-3 h-3" />
-                      </Button>
-                      <Button variant="ghost" size="icon" className="w-6 h-6 text-red-500" onClick={() => deleteField(f.id)}>
-                        <Trash2 className="w-3 h-3" />
-                      </Button>
-                    </div>
-                  </div>
-
-                  {/* 字段预览 */}
-                  <div className="bg-slate-50 rounded-md p-3">
-                    <CRFFormRenderer sections={[]} fields={[f]} readOnly />
+                <span className="text-[10px] text-slate-400 mt-2" style={{ writingMode: 'vertical-rl' }}>
+                  实时预览
+                </span>
+              </div>
+            ) : (
+              <aside
+                className="border-l border-slate-100 bg-slate-50 flex flex-col flex-shrink-0 transition-all"
+                style={{ width: previewWidth }}
+              >
+                <div className="px-4 py-2.5 border-b border-slate-100 flex items-center justify-between">
+                  <span className="text-xs font-semibold text-slate-500">实时预览</span>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[10px] text-slate-400">
+                      {selectedModule.fields.length} 个字段
+                    </span>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="w-5 h-5 text-slate-400 hover:text-teal-600"
+                      onClick={() => setPreviewCollapsed(true)}
+                      title="收起预览"
+                    >
+                      <ChevronRight className="w-3 h-3" />
+                    </Button>
                   </div>
                 </div>
-              ))}
-
-              {selectedModule.fields.length === 0 && (
-                <div className="text-center py-16">
-                  <p className="text-slate-400 text-sm">该模块暂无字段，点击上方按钮添加</p>
+                <div className="flex-1 overflow-y-auto p-4">
+                  {selectedModule.fields.length === 0 ? (
+                    <div className="text-center py-12">
+                      <Eye className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+                      <p className="text-xs text-slate-400">添加字段后将在此预览</p>
+                    </div>
+                  ) : (
+                    <div className="bg-white rounded-lg border border-slate-200 p-5">
+                      <h4 className="text-sm font-semibold text-slate-700 mb-4">{selectedModule.name}</h4>
+                      <CRFFormRenderer
+                        sections={[]}
+                        fields={selectedModule.fields}
+                        onChange={(data) => {
+                          console.log('preview data', data)
+                        }}
+                      />
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
+              </aside>
+            )}
           </>
-        ) : selectedVisit ? (
-          <div className="flex-1 flex items-center justify-center">
-            <div className="text-center">
-              <p className="text-slate-500 mb-2">已选择访视: {selectedVisit.name}</p>
-              <p className="text-xs text-slate-400">请从左侧展开访视并选择一个模块进行编辑</p>
-            </div>
-          </div>
-        ) : (
-          <div className="flex-1 flex items-center justify-center">
-            <div className="text-center">
-              <p className="text-slate-500">请从左侧选择一个访视或模块</p>
-            </div>
-          </div>
         )}
-      </main>
+      </div>
 
       {/* ========== 弹窗 ========== */}
       {/* 字段编辑 */}
@@ -636,18 +729,6 @@ function CRFDesignerCore({ project, onSave }: { project: Project; onSave: (p: Pr
               <Button variant="outline" onClick={() => setShowModuleDialog(false)}>取消</Button>
               <Button className="bg-teal-500 hover:bg-teal-600" onClick={() => saveModule(editingModule)}>保存</Button>
             </DialogFooter>
-          </DialogContent>
-        </Dialog>
-      )}
-
-      {/* 预览 */}
-      {showPreview && selectedModule && (
-        <Dialog open={showPreview} onOpenChange={setShowPreview}>
-          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-            <DialogHeader><DialogTitle>预览: {selectedModule.name}</DialogTitle></DialogHeader>
-            <div className="py-2">
-              <CRFFormRenderer sections={[]} fields={selectedModule.fields} />
-            </div>
           </DialogContent>
         </Dialog>
       )}

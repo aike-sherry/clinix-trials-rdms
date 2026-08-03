@@ -12,7 +12,7 @@ import {
   Plus, Trash2, Pencil, ChevronRight, ChevronLeft,
   Hash, Type, Calendar, ListChecks, ToggleLeft, AlignLeft, FileText,
   Package, Check, Lock, Unlock, Rocket, AlertCircle,
-  Search, X, Layers, Settings2, GripVertical, FlaskConical, Eye, Table,
+  Search, X, Layers, Settings2, GripVertical, FlaskConical, Eye, Table, SlidersHorizontal, ArrowLeftRight, Pen,
 } from 'lucide-react'
 
 // ==================== 常量 ====================
@@ -27,13 +27,18 @@ const FIELD_TYPE_ICONS: Record<FieldType, React.ReactNode> = {
   checkbox: <ListChecks className="w-3.5 h-3.5" />,
   toggle: <ToggleLeft className="w-3.5 h-3.5" />,
   label: <FileText className="w-3.5 h-3.5" />,
+  scale: <SlidersHorizontal className="w-3.5 h-3.5" />,
+  numberRange: <ArrowLeftRight className="w-3.5 h-3.5" />,
   table: <Table className="w-3.5 h-3.5" />,
+  signature: <Pen className="w-3.5 h-3.5" />,
 }
 
 const FIELD_TYPE_LABELS: Record<FieldType, string> = {
   text: '单行文本', textarea: '多行文本', number: '数字', date: '日期',
   datetime: '日期时间', select: '下拉选择', radio: '单选', checkbox: '多选',
   toggle: '开关', label: '说明文本', table: '表格',
+  scale: '量表评分', numberRange: '数值范围',
+  signature: '电子签名',
 }
 
 
@@ -541,6 +546,14 @@ function CRFConfigurator({
             onEditModuleInfo={(mod) => { setEditingModuleInfo(mod); setShowModuleInfoDialog(true) }}
             onRemoveModule={removeModuleFromVisit}
             onDeleteModule={deleteProjectModule}
+            onReorderModules={(newOrder) => {
+              onUpdate((p) => ({
+                ...p,
+                visits: p.visits.map((v) =>
+                  v.id === activeVisit.id ? { ...v, crfModuleIds: newOrder } : v
+                ),
+              }))
+            }}
           />
         ) : mode === 'module' && activeModule ? (
           <ModuleFieldEditor
@@ -600,6 +613,7 @@ function VisitModulesView({
   onEditModuleInfo,
   onRemoveModule,
   onDeleteModule,
+  onReorderModules,
 }: {
   visit: Visit
   allModules: CRFModule[]
@@ -610,6 +624,7 @@ function VisitModulesView({
   onEditModuleInfo: (module: CRFModule) => void
   onRemoveModule: (moduleId: string) => void
   onDeleteModule: (moduleId: string) => void
+  onReorderModules: (newOrder: string[]) => void
 }) {
   const [showPreview, setShowPreview] = useState(true)
   const [previewWidth, setPreviewWidth] = useState(460)
@@ -617,6 +632,50 @@ function VisitModulesView({
   const modules: CRFModule[] = visit.crfModuleIds
     .map((mid) => allModules.find((m) => m.id === mid))
     .filter(Boolean) as CRFModule[]
+
+  // 模块拖拽排序
+  const [dragModuleId, setDragModuleId] = useState<string | null>(null)
+  const [dragOverModuleId, setDragOverModuleId] = useState<string | null>(null)
+
+  const handleModuleDragStart = (e: React.DragEvent, moduleId: string) => {
+    setDragModuleId(moduleId)
+    e.dataTransfer.effectAllowed = 'move'
+    e.dataTransfer.setData('text/plain', moduleId)
+  }
+
+  const handleModuleDragOver = (e: React.DragEvent, moduleId: string) => {
+    e.preventDefault()
+    if (dragModuleId && dragModuleId !== moduleId) {
+      setDragOverModuleId(moduleId)
+    }
+  }
+
+  const handleModuleDrop = (e: React.DragEvent, targetId: string) => {
+    e.preventDefault()
+    if (!dragModuleId || dragModuleId === targetId) {
+      setDragModuleId(null)
+      setDragOverModuleId(null)
+      return
+    }
+    const fromIndex = visit.crfModuleIds.indexOf(dragModuleId)
+    const toIndex = visit.crfModuleIds.indexOf(targetId)
+    if (fromIndex === -1 || toIndex === -1) {
+      setDragModuleId(null)
+      setDragOverModuleId(null)
+      return
+    }
+    const newOrder = [...visit.crfModuleIds]
+    const [moved] = newOrder.splice(fromIndex, 1)
+    newOrder.splice(toIndex, 0, moved)
+    onReorderModules(newOrder)
+    setDragModuleId(null)
+    setDragOverModuleId(null)
+  }
+
+  const handleModuleDragEnd = () => {
+    setDragModuleId(null)
+    setDragOverModuleId(null)
+  }
 
   // 拖拽调整宽度
   const startResize = (e: React.MouseEvent) => {
@@ -738,7 +797,17 @@ function VisitModulesView({
           ) : (
             <div className={"grid gap-4 " + (showPreview ? "grid-cols-1" : "grid-cols-2")}>
               {modules.map((mod) => (
-                <div key={mod.id} className="bg-white rounded-lg border border-slate-200 p-5 hover:shadow-md transition-shadow">
+                <div
+                  key={mod.id}
+                  draggable={!readOnly}
+                  onDragStart={(e) => handleModuleDragStart(e, mod.id)}
+                  onDragOver={(e) => handleModuleDragOver(e, mod.id)}
+                  onDrop={(e) => handleModuleDrop(e, mod.id)}
+                  onDragEnd={handleModuleDragEnd}
+                  className={`bg-white rounded-lg border p-5 hover:shadow-md transition-shadow cursor-move ${
+                    dragOverModuleId === mod.id ? 'border-teal-400 ring-1 ring-teal-100' : 'border-slate-200'
+                  } ${dragModuleId === mod.id ? 'opacity-50' : ''}`}
+                >
                   <div className="flex items-start justify-between mb-3">
                     <div className="flex items-center gap-3">
                       <div className="w-10 h-10 rounded-lg bg-teal-50 flex items-center justify-center flex-shrink-0">

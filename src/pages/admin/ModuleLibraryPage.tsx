@@ -41,11 +41,13 @@ import {
   ToggleLeft,
   ChevronUp,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   X,
   Check,
   Settings2,
   ArrowLeft,
-  Table,
+  Table, SlidersHorizontal, ArrowLeftRight, Pen,
   Eye,
 } from 'lucide-react'
 
@@ -61,6 +63,9 @@ const FIELD_TYPE_LABELS: Record<FieldType, string> = {
   toggle: '开关',
   label: '标签',
   table: '表格',
+  scale: '量表评分',
+  numberRange: '数值范围',
+  signature: '电子签名',
 }
 
 const FIELD_TYPE_ICONS: Record<FieldType, React.ReactNode> = {
@@ -75,6 +80,9 @@ const FIELD_TYPE_ICONS: Record<FieldType, React.ReactNode> = {
   toggle: <ToggleLeft className="w-4 h-4" />,
   label: <FileText className="w-4 h-4" />,
   table: <Table className="w-4 h-4" />,
+  scale: <SlidersHorizontal className="w-4 h-4" />,
+  numberRange: <ArrowLeftRight className="w-4 h-4" />,
+  signature: <Pen className="w-4 h-4" />,
 }
 function genId() {
   return Math.random().toString(36).slice(2) + Date.now().toString(36)
@@ -115,6 +123,9 @@ export default function ModuleLibraryPage() {
 
   const [inlineEditingId, setInlineEditingId] = useState<string | null>(null)
   const [inlineData, setInlineData] = useState<CRFField | null>(null)
+
+  const [previewWidth, setPreviewWidth] = useState(420)
+  const [previewCollapsed, setPreviewCollapsed] = useState(false)
 
   const filtered = useMemo(() => {
     return moduleLibrary.filter((m) => {
@@ -329,6 +340,25 @@ export default function ModuleLibraryPage() {
 
   const handleFieldDragEnd = () => {
     setDragFieldId(null)
+  }
+
+  // ========== 预览面板拖拽调整宽度 ==========
+  const handlePreviewResizeStart = (e: React.MouseEvent) => {
+    e.preventDefault()
+    const startX = e.clientX
+    const startWidth = previewWidth
+    const onMove = (e: MouseEvent) => {
+      e.preventDefault()
+      const delta = startX - e.clientX
+      const newWidth = Math.max(280, Math.min(700, startWidth + delta))
+      setPreviewWidth(newWidth)
+    }
+    const onUp = () => {
+      document.removeEventListener('mousemove', onMove)
+      document.removeEventListener('mouseup', onUp)
+    }
+    document.addEventListener('mousemove', onMove)
+    document.addEventListener('mouseup', onUp)
   }
 
   const isInlineEditing = (fieldId: string) => inlineEditingId === fieldId
@@ -598,9 +628,9 @@ export default function ModuleLibraryPage() {
             </div>
 
             {/* 字段设计区：左侧组件库 + 中间设计画布 + 右侧实时预览 */}
-            <div className="flex-1 flex overflow-hidden">
+            <div className="flex-1 flex">
               {/* 左侧：字段类型组件库 */}
-              <aside className="w-44 border-r border-slate-100 bg-slate-50 flex flex-col flex-shrink-0">
+              <aside className="w-44 border-r border-slate-100 bg-slate-50 flex flex-col flex-shrink-0 sticky top-0 self-start h-fit max-h-full overflow-y-auto">
                 <div className="px-3 py-2.5 border-b border-slate-100">
                   <span className="text-xs font-semibold text-slate-500">字段组件</span>
                 </div>
@@ -747,35 +777,75 @@ export default function ModuleLibraryPage() {
                 )}
               </main>
 
+              {/* 拖拽分割条 */}
+              {!previewCollapsed && (
+                <div
+                  className="w-1.5 cursor-col-resize hover:bg-teal-400/40 active:bg-teal-400 transition-colors flex-shrink-0"
+                  onMouseDown={handlePreviewResizeStart}
+                  title="拖拽调整预览面板宽度"
+                />
+              )}
+
               {/* 右侧：实时预览 */}
-              <aside className="w-[420px] border-l border-slate-100 bg-slate-50 flex flex-col flex-shrink-0">
-                <div className="px-4 py-2.5 border-b border-slate-100 flex items-center justify-between">
-                  <span className="text-xs font-semibold text-slate-500">实时预览</span>
-                  <span className="text-[10px] text-slate-400">
-                    {selectedModule.fields.length} 个字段
+              {previewCollapsed ? (
+                <div className="w-9 border-l border-slate-100 bg-slate-50 flex flex-col items-center py-2 flex-shrink-0">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="w-7 h-7 text-slate-400 hover:text-teal-600"
+                    onClick={() => setPreviewCollapsed(false)}
+                    title="展开预览"
+                  >
+                    <ChevronLeft className="w-4 h-4" />
+                  </Button>
+                  <span className="text-[10px] text-slate-400 mt-2" style={{ writingMode: 'vertical-rl' }}>
+                    实时预览
                   </span>
                 </div>
-                <div className="flex-1 overflow-y-auto p-4">
-                  {selectedModule.fields.length === 0 ? (
-                    <div className="text-center py-12">
-                      <Eye className="w-8 h-8 text-slate-300 mx-auto mb-2" />
-                      <p className="text-xs text-slate-400">添加字段后将在此预览</p>
+              ) : (
+                <aside
+                  className="border-l border-slate-100 bg-slate-50 flex flex-col flex-shrink-0 transition-all"
+                  style={{ width: previewWidth }}
+                >
+                  <div className="px-4 py-2.5 border-b border-slate-100 flex items-center justify-between">
+                    <span className="text-xs font-semibold text-slate-500">实时预览</span>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[10px] text-slate-400">
+                        {selectedModule.fields.length} 个字段
+                      </span>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="w-5 h-5 text-slate-400 hover:text-teal-600"
+                        onClick={() => setPreviewCollapsed(true)}
+                        title="收起预览"
+                      >
+                        <ChevronRight className="w-3 h-3" />
+                      </Button>
                     </div>
-                  ) : (
-                    <div className="bg-white rounded-lg border border-slate-200 p-5">
-                      <h4 className="text-sm font-semibold text-slate-700 mb-4">{selectedModule.name}</h4>
-                      <CRFFormRenderer
-                        sections={[]}
-                        fields={selectedModule.fields}
-                        onChange={(data) => {
-                          // 预览模式不保存数据，仅展示交互效果
-                          console.log('preview data', data)
-                        }}
-                      />
-                    </div>
-                  )}
-                </div>
-              </aside>
+                  </div>
+                  <div className="flex-1 overflow-y-auto p-4">
+                    {selectedModule.fields.length === 0 ? (
+                      <div className="text-center py-12">
+                        <Eye className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+                        <p className="text-xs text-slate-400">添加字段后将在此预览</p>
+                      </div>
+                    ) : (
+                      <div className="bg-white rounded-lg border border-slate-200 p-5">
+                        <h4 className="text-sm font-semibold text-slate-700 mb-4">{selectedModule.name}</h4>
+                        <CRFFormRenderer
+                          sections={[]}
+                          fields={selectedModule.fields}
+                          onChange={(data) => {
+                            // 预览模式不保存数据，仅展示交互效果
+                            console.log('preview data', data)
+                          }}
+                        />
+                      </div>
+                    )}
+                  </div>
+                </aside>
+              )}
             </div>
 </div>
         )}
@@ -859,6 +929,18 @@ function FieldInlineEditor({
     onChange({ ...field, ...partial })
   }
 
+  const updateShowIf = (partial: Partial<NonNullable<CRFField['showIf']>>) => {
+    onChange({
+      ...field,
+      showIf: { ...(field.showIf || { fieldName: '', operator: 'equals' }), ...partial },
+    })
+  }
+
+  const clearShowIf = () => {
+    const { showIf: _, ...rest } = field
+    onChange(rest as CRFField)
+  }
+
   const updateValidation = (partial: Partial<NonNullable<CRFField['validation']>>) => {
     onChange({
       ...field,
@@ -930,6 +1012,19 @@ function FieldInlineEditor({
                   ]
                 }
               }
+              if (newType === 'scale') {
+                if (!field.scaleConfig) {
+                  updates.scaleConfig = {
+                    min: 0,
+                    max: 10,
+                    step: 1,
+                    labels: [
+                      { value: 0, label: '无痛' },
+                      { value: 10, label: '剧痛' },
+                    ],
+                  }
+                }
+              }
               if (newType !== 'number') {
                 updates.validation = { ...field.validation, min: undefined, max: undefined }
               }
@@ -961,6 +1056,18 @@ function FieldInlineEditor({
           />
         </div>
       </div>
+
+      {isNumber && (
+        <div>
+          <Label className="text-xs text-slate-500 mb-1 block">单位</Label>
+          <Input
+            className="h-8 text-sm"
+            placeholder="如：年、mmHg、kg..."
+            value={field.unit || ''}
+            onChange={(e) => update({ unit: e.target.value })}
+          />
+        </div>
+      )}
 
       <div>
         <Label className="text-xs text-slate-500 mb-1 block">帮助说明</Label>
@@ -1037,6 +1144,187 @@ function FieldInlineEditor({
         </div>
       </div>
 
+      {/* 量表配置 */}
+      {field.type === 'scale' && (
+        <div className="border border-slate-200 rounded-md p-3 space-y-3 bg-white">
+          <div className="flex items-center gap-2 text-xs font-semibold text-slate-600">
+            <SlidersHorizontal className="w-3.5 h-3.5" />
+            量表配置
+          </div>
+          <div className="grid grid-cols-3 gap-2">
+            <div>
+              <Label className="text-[10px] text-slate-400 mb-0.5 block">最小值</Label>
+              <Input
+                type="number"
+                className="h-7 text-xs"
+                value={field.scaleConfig?.min ?? 0}
+                onChange={(e) => {
+                  const v = Number(e.target.value)
+                  update({
+                    scaleConfig: { ...(field.scaleConfig || { min: 0, max: 10, step: 1 }), min: v },
+                  })
+                }}
+              />
+            </div>
+            <div>
+              <Label className="text-[10px] text-slate-400 mb-0.5 block">最大值</Label>
+              <Input
+                type="number"
+                className="h-7 text-xs"
+                value={field.scaleConfig?.max ?? 10}
+                onChange={(e) => {
+                  const v = Number(e.target.value)
+                  update({
+                    scaleConfig: { ...(field.scaleConfig || { min: 0, max: 10, step: 1 }), max: v },
+                  })
+                }}
+              />
+            </div>
+            <div>
+              <Label className="text-[10px] text-slate-400 mb-0.5 block">步长</Label>
+              <Input
+                type="number"
+                className="h-7 text-xs"
+                value={field.scaleConfig?.step ?? 1}
+                onChange={(e) => {
+                  const v = Number(e.target.value)
+                  update({
+                    scaleConfig: { ...(field.scaleConfig || { min: 0, max: 10, step: 1 }), step: v },
+                  })
+                }}
+              />
+            </div>
+          </div>
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] text-slate-500">刻度标签（可选）</span>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-5 px-1.5 text-[10px] text-teal-600"
+                onClick={() => {
+                  const labels = [...(field.scaleConfig?.labels || [])]
+                  labels.push({ value: field.scaleConfig?.min || 0, label: '' })
+                  update({
+                    scaleConfig: { ...(field.scaleConfig || { min: 0, max: 10, step: 1 }), labels },
+                  })
+                }}
+              >
+                <Plus className="w-2.5 h-2.5 mr-0.5" /> 添加标签
+              </Button>
+            </div>
+            {(field.scaleConfig?.labels || []).map((l, idx) => (
+              <div key={idx} className="flex items-center gap-2">
+                <Input
+                  type="number"
+                  className="h-6 text-[10px] w-16"
+                  placeholder="值"
+                  value={l.value}
+                  onChange={(e) => {
+                    const labels = [...(field.scaleConfig?.labels || [])]
+                    labels[idx] = { ...labels[idx], value: Number(e.target.value) }
+                    update({
+                      scaleConfig: { ...(field.scaleConfig || { min: 0, max: 10, step: 1 }), labels },
+                    })
+                  }}
+                />
+                <Input
+                  className="h-6 text-[10px] flex-1"
+                  placeholder="标签文本，如：轻度疼痛"
+                  value={l.label}
+                  onChange={(e) => {
+                    const labels = [...(field.scaleConfig?.labels || [])]
+                    labels[idx] = { ...labels[idx], label: e.target.value }
+                    update({
+                      scaleConfig: { ...(field.scaleConfig || { min: 0, max: 10, step: 1 }), labels },
+                    })
+                  }}
+                />
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="w-5 h-5 text-slate-400 hover:text-red-500"
+                  onClick={() => {
+                    const labels = (field.scaleConfig?.labels || []).filter((_, i) => i !== idx)
+                    update({
+                      scaleConfig: { ...(field.scaleConfig || { min: 0, max: 10, step: 1 }), labels },
+                    })
+                  }}
+                >
+                  <Trash2 className="w-2.5 h-2.5" />
+                </Button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* 条件显示 */}
+      <div className="border border-slate-200 rounded-md p-3 space-y-3 bg-white">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2 text-xs font-semibold text-slate-600">
+            <Eye className="w-3.5 h-3.5" />
+            条件显示
+          </div>
+          <label className="flex items-center gap-1.5 text-xs text-slate-500 cursor-pointer">
+            <input
+              type="checkbox"
+              className="rounded border-slate-300 text-teal-600 focus:ring-teal-500"
+              checked={!!field.showIf}
+              onChange={(e) => {
+                if (e.target.checked) {
+                  updateShowIf({ fieldName: '', operator: 'equals' })
+                } else {
+                  clearShowIf()
+                }
+              }}
+            />
+            启用条件显示
+          </label>
+        </div>
+        {field.showIf && (
+          <div className="grid grid-cols-3 gap-2">
+            <div>
+              <Label className="text-[10px] text-slate-400 mb-0.5 block">依赖字段名</Label>
+              <Input
+                className="h-7 text-xs"
+                placeholder="如：smoking_status"
+                value={field.showIf.fieldName}
+                onChange={(e) => updateShowIf({ fieldName: e.target.value })}
+              />
+            </div>
+            <div>
+              <Label className="text-[10px] text-slate-400 mb-0.5 block">条件</Label>
+              <select
+                value={field.showIf.operator}
+                onChange={(e) => updateShowIf({ operator: e.target.value as any })}
+                className="h-7 text-xs w-full rounded border border-slate-200 px-2 bg-white"
+              >
+                <option value="equals">等于</option>
+                <option value="notEquals">不等于</option>
+                <option value="contains">包含</option>
+                <option value="notEmpty">不为空</option>
+              </select>
+            </div>
+            <div>
+              <Label className="text-[10px] text-slate-400 mb-0.5 block">目标值</Label>
+              <Input
+                className="h-7 text-xs"
+                placeholder="如：yes"
+                value={field.showIf.value || ''}
+                onChange={(e) => updateShowIf({ value: e.target.value })}
+                disabled={field.showIf.operator === 'notEmpty'}
+              />
+            </div>
+          </div>
+        )}
+        {!field.showIf && (
+          <p className="text-[10px] text-slate-400">
+            启用后，此字段仅在满足指定条件时才显示。例如：当「吸烟情况」等于「是」时才显示「吸烟量」字段。
+          </p>
+        )}
+      </div>
+
       {/* 选项列表（选择类字段） */}
       {hasOptions && (
         <div className="border border-slate-200 rounded-md p-3 space-y-3 bg-white">
@@ -1066,32 +1354,33 @@ function FieldInlineEditor({
             {(field.options || []).map((opt, idx, arr) => (
               <div
                 key={idx}
-                className="flex items-center gap-2 p-2 rounded-md border border-slate-100 bg-slate-50/50"
+                className="p-2 rounded-md border border-slate-100 bg-slate-50/50 space-y-2"
               >
-                <span className="text-xs text-slate-400 font-mono w-5 text-center">
-                  {idx + 1}
-                </span>
-                <Input
-                  placeholder="显示文本"
-                  className="h-7 text-xs flex-1"
-                  value={opt.label}
-                  onChange={(e) => {
-                    const newOpts = [...(field.options || [])]
-                    newOpts[idx] = { ...newOpts[idx], label: e.target.value }
-                    update({ options: newOpts })
-                  }}
-                />
-                <Input
-                  placeholder="值"
-                  className="h-7 text-xs flex-1"
-                  value={opt.value}
-                  onChange={(e) => {
-                    const newOpts = [...(field.options || [])]
-                    newOpts[idx] = { ...newOpts[idx], value: e.target.value }
-                    update({ options: newOpts })
-                  }}
-                />
-                <div className="flex items-center gap-0.5">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-slate-400 font-mono w-5 text-center flex-shrink-0">
+                    {idx + 1}
+                  </span>
+                  <Input
+                    placeholder="显示文本"
+                    className="h-7 text-xs flex-1"
+                    value={opt.label}
+                    onChange={(e) => {
+                      const newOpts = [...(field.options || [])]
+                      newOpts[idx] = { ...newOpts[idx], label: e.target.value }
+                      update({ options: newOpts })
+                    }}
+                  />
+                  <Input
+                    placeholder="值"
+                    className="h-7 text-xs w-24"
+                    value={opt.value}
+                    onChange={(e) => {
+                      const newOpts = [...(field.options || [])]
+                      newOpts[idx] = { ...newOpts[idx], value: e.target.value }
+                      update({ options: newOpts })
+                    }}
+                  />
+                  <div className="flex items-center gap-0.5 flex-shrink-0">
                   <Button
                     variant="ghost"
                     size="icon"
@@ -1130,6 +1419,45 @@ function FieldInlineEditor({
                     <Trash2 className="w-3 h-3" />
                   </Button>
                 </div>
+                </div>
+                {/* 额外输入配置 */}
+                <label className="flex items-center gap-1.5 pl-7 text-xs text-slate-500 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    className="rounded border-slate-300 text-teal-600 focus:ring-teal-500"
+                    checked={opt.hasExtraInput || false}
+                    onChange={(e) => {
+                      const newOpts = [...(field.options || [])]
+                      newOpts[idx] = { ...newOpts[idx], hasExtraInput: e.target.checked }
+                      update({ options: newOpts })
+                    }}
+                  />
+                  选择此项后需要额外输入补充信息
+                </label>
+                {opt.hasExtraInput && (
+                  <div className="flex items-center gap-2 pl-7">
+                    <Input
+                      placeholder="额外输入标签，如：吸烟量（支/天）"
+                      className="h-7 text-xs flex-1"
+                      value={opt.extraInputLabel || ''}
+                      onChange={(e) => {
+                        const newOpts = [...(field.options || [])]
+                        newOpts[idx] = { ...newOpts[idx], extraInputLabel: e.target.value }
+                        update({ options: newOpts })
+                      }}
+                    />
+                    <Input
+                      placeholder="占位提示"
+                      className="h-7 text-xs w-28"
+                      value={opt.extraInputPlaceholder || ''}
+                      onChange={(e) => {
+                        const newOpts = [...(field.options || [])]
+                        newOpts[idx] = { ...newOpts[idx], extraInputPlaceholder: e.target.value }
+                        update({ options: newOpts })
+                      }}
+                    />
+                  </div>
+                )}
               </div>
             ))}
             {(field.options || []).length === 0 && (
