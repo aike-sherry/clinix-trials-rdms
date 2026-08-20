@@ -1,73 +1,48 @@
-# React + TypeScript + Vite
+# CLINI X TRIALS · 科研数据管理平台（RDMS）
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+面向医院内网部署的临床研究数据管理系统原型。覆盖三端角色：
 
-Currently, two official plugins are available:
+- **后台管理端**：课题/模块库/CRF 设计器、客户管理、账号授权、数据留痕（不接触患者数据）
+- **管理人员端（课题主持人）**：项目/进度/患者/访视/数据集成（HIS 抓取）/数据管理/数据审核/疑问管理/统计分析/账户管理
+- **数据录入端（研究人员）**：受试者登记、数据录入（语音录入/文件识别）、访视管理、疑问管理、我的工作台
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+## 技术栈
 
-## React Compiler
+React 19 + TypeScript + Vite 7 + Tailwind CSS 3 + shadcn/ui（Radix）+ Recharts + react-router 7
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## 新电脑环境准备
 
-## Expanding the ESLint configuration
+1. 安装 **Node.js ≥ 20**（开发时用的是 v24；LTS 即可）和 **Git**
+2. 克隆仓库并安装依赖：
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+git clone https://github.com/aike-sherry/clinix-trials-rdms.git
+cd clinix-trials-rdms
+npm install        # 或 npm ci（按 package-lock.json 严格安装）
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+3. 启动开发服务器：
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+npm run dev        # 默认 http://localhost:5173
 ```
+
+4. 构建验证：
+
+```bash
+npm run build      # tsc -b && vite build，必须通过
+```
+
+> 演示数据在浏览器 localStorage 中自动播种（首次打开登录页约 5–10 秒），换电脑后无需迁移任何数据文件。
+
+## 测试账号（密码均为 123456）
+
+| 角色 | 账号 |
+|------|------|
+| 后台管理员 | admin@xiaoyi.cn |
+| 管理人员（课题主持人） | zhangci@hospital.cn |
+| 数据录入人员 | wangfang@hospital.cn / liuyang@hospital.cn / chenjing@hospital.cn |
+
+## 部署说明
+
+系统定位为医院**内网部署**：`npm run build` 产出 `dist/` 纯静态文件，交给任意静态服务器（Nginx/IIS）即可。数据集成（HIS/EMR 抓取）页面为前置演示界面，实际抓取需医院信息科开放视图/接口权限后对接。

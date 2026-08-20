@@ -10,3 +10,6 @@ tmp_patch*/
 /*.py
 e2e_*
 /src/**/*.py
+
+# 开发期截图与临时补丁
+screenshots/
