@@ -9,3 +9,4 @@ tmp_patch*/
 # 开发期临时脚本
 /*.py
 e2e_*
+/src/**/*.py
