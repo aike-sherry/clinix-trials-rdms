@@ -168,7 +168,7 @@ export default function ProjectAccount() {
 
       {/* 分配权限弹窗 */}
       <Dialog open={showPermDialog} onOpenChange={setShowPermDialog}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>分配项目权限</DialogTitle>
           </DialogHeader>

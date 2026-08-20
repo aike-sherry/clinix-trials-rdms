@@ -8,12 +8,18 @@ import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import CRFFormRenderer from '@/components/CRFFormRenderer'
+import { AutoStatusConfigEditor } from '@/components/AutoStatusConfigEditor'
+import { RowPresetConfigEditor, addRowPatch } from '@/components/RowPresetConfigEditor'
 import {
   Plus, Trash2, Pencil, ChevronRight, ChevronLeft,
   Hash, Type, Calendar, ListChecks, ToggleLeft, AlignLeft, FileText,
   Package, Check, Lock, Unlock, Rocket, AlertCircle,
   Search, X, Layers, Settings2, GripVertical, FlaskConical, Eye, Table, SlidersHorizontal, ArrowLeftRight, Pen,
+  CalendarRange, ListTree, TextQuote, Paperclip, LayoutGrid, Maximize2, Minimize2, Sparkles,
 } from 'lucide-react'
+import VisitPlanMatrix from '@/components/VisitPlanMatrix'
+import { CRFAgentChat } from '@/components/CRFAgentChat'
+import type { CRFPlan } from '@/utils/crfAgent'
 
 // ==================== 常量 ====================
 const FIELD_TYPE_ICONS: Record<FieldType, React.ReactNode> = {
@@ -22,24 +28,35 @@ const FIELD_TYPE_ICONS: Record<FieldType, React.ReactNode> = {
   number: <Hash className="w-3.5 h-3.5" />,
   date: <Calendar className="w-3.5 h-3.5" />,
   datetime: <Calendar className="w-3.5 h-3.5" />,
+  dateRange: <CalendarRange className="w-3.5 h-3.5" />,
   select: <ListChecks className="w-3.5 h-3.5" />,
   radio: <ListChecks className="w-3.5 h-3.5" />,
   checkbox: <ListChecks className="w-3.5 h-3.5" />,
+  treeSelect: <ListTree className="w-3.5 h-3.5" />,
   toggle: <ToggleLeft className="w-3.5 h-3.5" />,
   label: <FileText className="w-3.5 h-3.5" />,
   scale: <SlidersHorizontal className="w-3.5 h-3.5" />,
   numberRange: <ArrowLeftRight className="w-3.5 h-3.5" />,
   table: <Table className="w-3.5 h-3.5" />,
   signature: <Pen className="w-3.5 h-3.5" />,
+  richText: <TextQuote className="w-3.5 h-3.5" />,
+  fileUpload: <Paperclip className="w-3.5 h-3.5" />,
+  unit: <Hash className="w-3.5 h-3.5" />,
+  range: <ArrowLeftRight className="w-3.5 h-3.5" />,
+  flag: <ListChecks className="w-3.5 h-3.5" />,
 }
 
 const FIELD_TYPE_LABELS: Record<FieldType, string> = {
   text: '单行文本', textarea: '多行文本', number: '数字', date: '日期',
-  datetime: '日期时间', select: '下拉选择', radio: '单选', checkbox: '多选',
-  toggle: '开关', label: '说明文本', table: '表格',
+  datetime: '日期时间', dateRange: '时间段', select: '下拉选择', radio: '单选', checkbox: '多选',
+  treeSelect: '树形选择', toggle: '开关', label: '说明文本', table: '表格（动态多行）',
   scale: '量表评分', numberRange: '数值范围',
-  signature: '电子签名',
+  signature: '电子签名', richText: '富文本', fileUpload: '文件上传',
+  unit: '单位（表格列）', range: '正常值范围（表格列）', flag: '判定状态（表格列）',
 }
+
+/** 仅表格列可用的类型：不作为顶层字段组件出现在组件面板中 */
+const COLUMN_ONLY_TYPES: FieldType[] = ['unit', 'range', 'flag']
 
 
 function genId() {
@@ -97,7 +114,7 @@ function ModuleInfoDialog({ open, onOpenChange, module, onSave }: {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
         <DialogHeader><DialogTitle>编辑模块信息</DialogTitle></DialogHeader>
         <div className="space-y-4 py-2">
           <div>
@@ -148,8 +165,11 @@ function ModuleInfoDialog({ open, onOpenChange, module, onSave }: {
 // ==================== 主页面 ====================
 export default function ProjectCRFView() {
   const { projectId } = useParams<{ projectId: string }>()
-  const { projects, moduleLibrary, saveProject } = useAppStorage()
+  const { projects, moduleLibrary, saveProject, saveModuleLibraryItem } = useAppStorage()
   const project = projects.find((p) => p.id === projectId)
+  // 访视计划预览弹窗
+  const [matrixOpen, setMatrixOpen] = useState(false)
+  const [matrixZoom, setMatrixZoom] = useState(false)
 
   if (!project) return <div className="text-center py-20 text-slate-500">项目不存在</div>
 
@@ -193,6 +213,13 @@ export default function ProjectCRFView() {
           )}
         </div>
         <div className="flex items-center gap-2">
+          <Button
+            variant="outline" size="sm"
+            onClick={() => setMatrixOpen(true)}
+            disabled={project.visits.length === 0 || project.crfModules.length === 0}
+          >
+            <LayoutGrid className="w-3.5 h-3.5 mr-1" /> 访视计划
+          </Button>
           {isPublished ? (
             <Button variant="outline" size="sm" onClick={handleUnpublish}>
               <Unlock className="w-3.5 h-3.5 mr-1" /> 取消发布
@@ -212,7 +239,76 @@ export default function ProjectCRFView() {
         </div>
       )}
 
-      <CRFConfigurator project={project} onUpdate={updateProject} moduleLibrary={moduleLibrary} readOnly={isPublished} />
+      <CRFConfigurator project={project} onUpdate={updateProject} moduleLibrary={moduleLibrary} readOnly={isPublished} onSaveLibraryModule={saveModuleLibraryItem} />
+
+      {/* 访视计划预览：基于当前 CRF 配置实时生成，发布前即可核对 */}
+      <Dialog open={matrixOpen} onOpenChange={setMatrixOpen}>
+        <DialogContent className={matrixZoom ? 'sm:max-w-[95vw] max-h-[92vh] overflow-auto' : 'sm:max-w-6xl'}>
+          <DialogHeader>
+            <div className="flex items-center justify-between pr-6">
+              <DialogTitle>访视计划</DialogTitle>
+              <Button
+                variant="ghost" size="icon" className="h-7 w-7 text-slate-400 hover:text-slate-600"
+                onClick={() => setMatrixZoom(!matrixZoom)}
+                title={matrixZoom ? '还原' : '放大'}
+              >
+                {matrixZoom ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
+              </Button>
+            </div>
+          </DialogHeader>
+          <div className="space-y-3 min-w-0">
+            <div className="grid grid-cols-[220px_1fr] gap-3 items-end">
+              <div>
+                <span className="block text-xs text-slate-400 mb-1">研究编号</span>
+                <div className="h-8 px-3 flex items-center rounded-md border border-slate-200 bg-slate-50 text-xs text-slate-700">
+                  {project.projectNo}
+                </div>
+              </div>
+              <div className="min-w-0">
+                <span className="block text-xs text-slate-400 mb-1">研究标题</span>
+                <div className="min-h-8 px-3 py-1.5 flex items-center rounded-md border border-slate-200 bg-slate-50 text-xs text-slate-700 leading-snug break-all">
+                  {project.name}
+                </div>
+              </div>
+            </div>
+            <VisitPlanMatrix
+              project={project}
+              editable={!isPublished}
+              onToggle={(visitId, moduleId) =>
+                updateProject((p) => ({
+                  ...p,
+                  visits: p.visits.map((v) =>
+                    v.id !== visitId
+                      ? v
+                      : {
+                          ...v,
+                          crfModuleIds: v.crfModuleIds.includes(moduleId)
+                            ? v.crfModuleIds.filter((id) => id !== moduleId)
+                            : [...v.crfModuleIds, moduleId],
+                        },
+                  ),
+                }))
+              }
+              onToggleRow={(moduleId, enable) =>
+                updateProject((p) => ({
+                  ...p,
+                  visits: p.visits.map((v) => ({
+                    ...v,
+                    crfModuleIds: enable
+                      ? [...new Set([...v.crfModuleIds, moduleId])]
+                      : v.crfModuleIds.filter((id) => id !== moduleId),
+                  })),
+                }))
+              }
+            />
+            <p className="text-[11px] text-slate-400">
+              {isPublished
+                ? '访视计划由当前 CRF 配置实时生成：行是研究需执行的评估模块，列是访视（含计划访视日与窗口期），✓ 表示该访视需执行此项评估。'
+                : '点击格子即可切换该访视是否执行此项评估；行尾「全选/清空」一键应用到全部访视。调整后记得发布 CRF 生效。'}
+            </p>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
@@ -223,11 +319,13 @@ function CRFConfigurator({
   onUpdate,
   moduleLibrary,
   readOnly,
+  onSaveLibraryModule,
 }: {
   project: Project
   onUpdate: (updater: (p: Project) => Project) => void
   moduleLibrary: ModuleLibraryItem[]
   readOnly: boolean
+  onSaveLibraryModule: (item: ModuleLibraryItem) => void
 }) {
   const [activeVisitId, setActiveVisitId] = useState<string>(
     project.visits.length > 0 ? project.visits[0].id : ''
@@ -235,6 +333,8 @@ function CRFConfigurator({
   const [mode, setMode] = useState<'visit' | 'module' | 'preview'>('visit')
   const [editingModuleId, setEditingModuleId] = useState<string>('')
   const [previewingModuleId, setPreviewingModuleId] = useState<string>('')
+  // CRF 组装助手聊天面板
+  const [showCRFAgent, setShowCRFAgent] = useState(false)
 
   // 弹窗状态
   const [showAddModuleDialog, setShowAddModuleDialog] = useState(false)
@@ -355,6 +455,63 @@ function CRFConfigurator({
     }))
   }
 
+  // ---------- CRF 组装助手：应用挂载/移除计划 ----------
+  // 导入约定与本页 AddModuleDialog 一致：项目模块沿用库模块 id，便于跨入口去重
+  const applyCRFPlan = (plan: CRFPlan) => {
+    if (readOnly) return
+    // 移除模式：仅从访视中移除挂载，模块保留在研究中
+    if (plan.mode === 'remove') {
+      onUpdate((p) => ({
+        ...p,
+        visits: p.visits.map((v) => {
+          const pi = plan.items.find((i) => i.visitId === v.id)
+          if (!pi) return v
+          const removeIds = pi.modules
+            .filter((m) => !m.notMounted && m.source !== 'missing' && m.refId)
+            .map((m) => m.refId!)
+          return removeIds.length ? { ...v, crfModuleIds: v.crfModuleIds.filter((id) => !removeIds.includes(id)) } : v
+        }),
+      }))
+      return
+    }
+    onUpdate((p) => {
+      const idMap = new Map<string, string>()
+      const newModules: CRFModule[] = []
+      for (const item of plan.items) {
+        for (const m of item.modules) {
+          if (m.source !== 'library' || !m.refId || idMap.has(m.refId)) continue
+          const existing = p.crfModules.find((x) => x.id === m.refId)
+          if (existing) {
+            idMap.set(m.refId, existing.id)
+            continue
+          }
+          const lib = moduleLibrary.find((x) => x.id === m.refId)
+          if (!lib) continue
+          idMap.set(m.refId, lib.id)
+          newModules.push({
+            id: lib.id,
+            projectId: p.id,
+            name: lib.name,
+            description: lib.description,
+            fields: lib.fields.map((f) => ({ ...f, id: genId() })),
+            order: p.crfModules.length + newModules.length,
+            fieldLayout: lib.fieldLayout,
+          })
+        }
+      }
+      const visits = p.visits.map((v) => {
+        const pi = plan.items.find((i) => i.visitId === v.id)
+        if (!pi) return v
+        const addIds = pi.modules
+          .filter((m) => !m.already && m.source !== 'missing')
+          .map((m) => (m.source === 'library' ? idMap.get(m.refId!) : m.refId))
+          .filter((id): id is string => !!id && !v.crfModuleIds.includes(id))
+        return addIds.length ? { ...v, crfModuleIds: [...v.crfModuleIds, ...addIds] } : v
+      })
+      return { ...p, crfModules: [...p.crfModules, ...newModules], visits }
+    })
+  }
+
   const deleteProjectModule = (moduleId: string) => {
     if (readOnly) return
     if (!confirm('确定删除此模块？该模块将从所有访视中移除，且字段数据将丢失。')) return
@@ -469,6 +626,16 @@ function CRFConfigurator({
           <span className="text-sm font-semibold text-slate-700">访视列表</span>
           <p className="text-xs text-slate-400 mt-0.5">选择访视配置模块</p>
         </div>
+        {!readOnly && (
+          <div className="px-3 py-2 border-b border-slate-100">
+            <Button
+              className="w-full h-8 text-xs bg-gradient-to-r from-teal-500 to-cyan-500 hover:from-teal-600 hover:to-cyan-600 text-white"
+              onClick={() => setShowCRFAgent(true)}
+            >
+              <Sparkles className="w-3.5 h-3.5 mr-1" /> AI 组装 CRF
+            </Button>
+          </div>
+        )}
         <div className="flex-1 overflow-y-auto py-2">
           {sortedVisits.length === 0 ? (
             <div className="text-center py-8 px-4">
@@ -576,6 +743,15 @@ function CRFConfigurator({
 
       {/* ========== 弹窗 ========== */}
       <AddModuleDialog open={showAddModuleDialog} onClose={() => setShowAddModuleDialog(false)} moduleLibrary={moduleLibrary} visit={activeVisit} projectModuleIds={new Set(project.crfModules.map((m) => m.id))} onAdd={addModulesToVisit} />
+      {/* CRF 组装助手：对话描述访视-模块挂载 → 计划预览 → 确认应用；缺失模块可当场设计入库 */}
+      <CRFAgentChat
+        open={showCRFAgent}
+        project={project}
+        library={moduleLibrary}
+        onClose={() => setShowCRFAgent(false)}
+        onApply={applyCRFPlan}
+        onSaveModule={onSaveLibraryModule}
+      />
       {editingVisit && (
         <Dialog open={showVisitDialog} onOpenChange={setShowVisitDialog}>
           <DialogContent>
@@ -939,7 +1115,7 @@ function ModulePreviewView({ module, onBack }: { module: CRFModule; onBack: () =
       <div className="flex-1 overflow-y-auto p-6">
         <div className="max-w-2xl mx-auto space-y-4">
           <div className="bg-white rounded-lg border border-slate-200 p-6">
-            <CRFFormRenderer sections={[]} fields={module.fields} />
+            <CRFFormRenderer sections={[]} fields={module.fields} fieldLayout={module.fieldLayout} />
           </div>
           <p className="text-xs text-slate-400 text-center">以上为数据录入人员看到的模块样式</p>
         </div>
@@ -982,7 +1158,7 @@ function ModuleFieldEditor({
         {!readOnly && (
           <div className="flex items-center gap-1 flex-wrap">
             <span className="text-xs text-slate-400 mr-1">添加字段:</span>
-            {(Object.keys(FIELD_TYPE_LABELS) as FieldType[]).map((type) => (
+            {(Object.keys(FIELD_TYPE_LABELS) as FieldType[]).filter((t) => !COLUMN_ONLY_TYPES.includes(t)).map((type) => (
               <Button key={type} variant="outline" size="sm" className="h-7 text-xs px-2" onClick={() => onAddField(type)}>
                 {FIELD_TYPE_ICONS[type]} <span className="ml-1">{FIELD_TYPE_LABELS[type]}</span>
               </Button>
@@ -1001,15 +1177,15 @@ function ModuleFieldEditor({
           <div className="space-y-3 max-w-3xl mx-auto">
             {sortedFields.map((f, fi) => (
               <div key={f.id} className="bg-white rounded-lg border border-slate-200 p-4 hover:shadow-sm transition-shadow">
-                <div className="flex items-center justify-between mb-3">
-                  <div className="flex items-center gap-2.5">
-                    <GripVertical className="w-3.5 h-3.5 text-slate-300" />
-                    <span className="text-xs text-slate-400 font-mono">#{fi + 1}</span>
-                    <span className="text-slate-400">{FIELD_TYPE_ICONS[f.type]}</span>
-                    <span className="font-medium text-sm text-slate-700">{f.label}</span>
-                    {f.validation?.required && <span className="text-red-400 text-xs">*</span>}
-                    <Badge variant="outline" className="text-[10px] h-4 px-1.5">{FIELD_TYPE_LABELS[f.type]}</Badge>
-                    <span className="text-xs text-slate-400 font-mono">{f.name}</span>
+                <div className="flex items-center justify-between gap-2 mb-3">
+                  <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                    <GripVertical className="w-3.5 h-3.5 text-slate-300 shrink-0" />
+                    <span className="text-xs text-slate-400 font-mono shrink-0">#{fi + 1}</span>
+                    <span className="text-slate-400 shrink-0">{FIELD_TYPE_ICONS[f.type]}</span>
+                    <span className="font-medium text-sm text-slate-700 truncate min-w-0" title={f.label}>{f.label}</span>
+                    {f.validation?.required && <span className="text-red-400 text-xs shrink-0">*</span>}
+                    <Badge variant="outline" className="text-[10px] h-4 px-1.5 shrink-0 whitespace-nowrap">{FIELD_TYPE_LABELS[f.type]}</Badge>
+                    <span className="text-xs text-slate-400 font-mono truncate min-w-0 max-w-36" title={f.name}>{f.name}</span>
                   </div>
                   {!readOnly && (
                     <div className="flex items-center gap-0.5">
@@ -1280,8 +1456,51 @@ function FieldEditDialog({ open, onOpenChange, field, onSave }: {
             <div className="border rounded-md p-3 space-y-3">
               <div className="flex items-center justify-between">
                 <Label className="text-sm font-semibold">表格列配置</Label>
-                <Button variant="outline" size="sm" onClick={addColumn}><Plus className="w-3 h-3 mr-1" />添加列</Button>
+                <div className="flex items-center gap-2">
+                  {!f.labConfig && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={!f.columns?.some((c) => c.type === 'text')}
+                      title={
+                        f.columns?.some((c) => c.type === 'text')
+                          ? '在预置行清单末尾追加一行（固定首列自动取第一个文本列）'
+                          : '请先添加一个文本列作为固定首列'
+                      }
+                      onClick={() => {
+                        const p = addRowPatch(f)
+                        if (p) setF({ ...f, ...p })
+                      }}
+                    >
+                      <Plus className="w-3 h-3 mr-1" />添加行
+                    </Button>
+                  )}
+                  <Button variant="outline" size="sm" onClick={addColumn}><Plus className="w-3 h-3 mr-1" />添加列</Button>
+                </div>
               </div>
+              {/* 表格级开关：自动序号列（录入端首列自动显示行号，只读，随增删行自动重排） */}
+              <label className="flex items-center gap-1.5 text-[11px] text-slate-500 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  className="accent-teal-500"
+                  checked={!!f.autoRowNumber}
+                  onChange={(e) => setF({ ...f, autoRowNumber: e.target.checked || undefined })}
+                />
+                自动序号列：表格首列自动显示行号（录入端只读，随增删行自动重排）
+              </label>
+              {/* 表格级配置：状态随日期自动更新 */}
+              <AutoStatusConfigEditor
+                columns={f.columns || []}
+                value={f.autoStatus}
+                onChange={(v) => setF({ ...f, autoStatus: v })}
+              />
+              {/* 表格级配置：行设置（自由行/预置行）+ 跨访视矩阵（实验室模式下隐藏，实验室自带） */}
+              {!f.labConfig && (
+                <RowPresetConfigEditor
+                  field={f}
+                  onChange={(p) => setF({ ...f, ...p })}
+                />
+              )}
               {(f.columns || []).length === 0 && (
                 <p className="text-xs text-slate-400">暂无列配置，点击上方按钮添加</p>
               )}
@@ -1316,6 +1535,9 @@ function FieldEditDialog({ open, onOpenChange, field, onSave }: {
                           <option value="date">日期</option>
                           <option value="select">下拉选择</option>
                           <option value="textarea">多行文本</option>
+                          <option value="unit">单位（自动·只读）</option>
+                          <option value="range">正常值范围（自动·只读）</option>
+                          <option value="flag">判定状态（自动·只读）</option>
                         </select>
                       </div>
                       <div className="col-span-2 flex justify-end">
@@ -1370,6 +1592,10 @@ function FieldEditDialog({ open, onOpenChange, field, onSave }: {
                     )}
                   </div>
                 ))}
+              </div>
+              {/* 实验室类表格配置指引：能力已融入列类型与行配置，不再单独设模式 */}
+              <div className="pt-1 border-t border-slate-100 text-[11px] text-slate-400 leading-relaxed">
+                配置实验室检查：列类型加「单位 / 正常值范围 / 判定状态」，用上方「+ 添加行」预置检验项目即可；参考范围由执行人员在录入端上传（含生效日期），系统按检测日期自动匹配版本并判定偏高/偏低
               </div>
             </div>
           )}

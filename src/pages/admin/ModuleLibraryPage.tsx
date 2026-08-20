@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react'
 import { useAppStorage } from '@/hooks/useAppStorage'
-import type { ModuleLibraryItem, CRFField, FieldType } from '@/types'
+import type { ModuleLibraryItem, CRFField, FieldType, TreeOption } from '@/types'
+import { DEFAULT_TREE_OPTIONS } from '@/types'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -22,6 +23,8 @@ import {
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
 import CRFFormRenderer from '@/components/CRFFormRenderer'
+import { AutoStatusConfigEditor } from '@/components/AutoStatusConfigEditor'
+import { RowPresetConfigEditor, addRowPatch } from '@/components/RowPresetConfigEditor'
 import {
   Search,
   Plus,
@@ -48,8 +51,9 @@ import {
   Settings2,
   ArrowLeft,
   Table, SlidersHorizontal, ArrowLeftRight, Pen,
-  Eye,
+  Eye, CalendarRange, ListTree, TextQuote, Paperclip, Sparkles, Database,
 } from 'lucide-react'
+import { ModuleAgentChat } from '@/components/ModuleAgentChat'
 
 const FIELD_TYPE_LABELS: Record<FieldType, string> = {
   text: '文本',
@@ -57,16 +61,26 @@ const FIELD_TYPE_LABELS: Record<FieldType, string> = {
   number: '数字',
   date: '日期',
   datetime: '日期时间',
+  dateRange: '时间段',
   select: '下拉选择',
   radio: '单选',
   checkbox: '多选',
+  treeSelect: '树形选择',
   toggle: '开关',
   label: '标签',
-  table: '表格',
+  table: '表格（动态多行）',
   scale: '量表评分',
   numberRange: '数值范围',
   signature: '电子签名',
+  richText: '富文本',
+  fileUpload: '文件上传',
+  unit: '单位（表格列）',
+  range: '正常值范围（表格列）',
+  flag: '判定状态（表格列）',
 }
+
+/** 仅表格列可用的类型：不作为顶层字段组件出现在组件面板/字段类型选择中 */
+const COLUMN_ONLY_TYPES: FieldType[] = ['unit', 'range', 'flag']
 
 const FIELD_TYPE_ICONS: Record<FieldType, React.ReactNode> = {
   text: <Type className="w-4 h-4" />,
@@ -74,15 +88,22 @@ const FIELD_TYPE_ICONS: Record<FieldType, React.ReactNode> = {
   number: <Hash className="w-4 h-4" />,
   date: <Calendar className="w-4 h-4" />,
   datetime: <Calendar className="w-4 h-4" />,
+  dateRange: <CalendarRange className="w-4 h-4" />,
   select: <ListChecks className="w-4 h-4" />,
   radio: <ListChecks className="w-4 h-4" />,
   checkbox: <ListChecks className="w-4 h-4" />,
+  treeSelect: <ListTree className="w-4 h-4" />,
   toggle: <ToggleLeft className="w-4 h-4" />,
   label: <FileText className="w-4 h-4" />,
   table: <Table className="w-4 h-4" />,
   scale: <SlidersHorizontal className="w-4 h-4" />,
   numberRange: <ArrowLeftRight className="w-4 h-4" />,
   signature: <Pen className="w-4 h-4" />,
+  richText: <TextQuote className="w-4 h-4" />,
+  fileUpload: <Paperclip className="w-4 h-4" />,
+  unit: <Hash className="w-4 h-4" />,
+  range: <ArrowLeftRight className="w-4 h-4" />,
+  flag: <ListChecks className="w-4 h-4" />,
 }
 function genId() {
   return Math.random().toString(36).slice(2) + Date.now().toString(36)
@@ -101,7 +122,7 @@ function toFieldName(label: string) {
     .replace(/^[0-9]/, '_$&')
 }
 
-const CATEGORIES = ['全部', '基础信息', '检查', '安全', '用药', '其他']
+const CATEGORIES = ['全部', '基础模块', '体格检查', '实验室检查', '检查/检验', '疗效评估', '安全性评估', '既往病史', '合并用药', '其他']
 
 export default function ModuleLibraryPage() {
   const {
@@ -126,6 +147,8 @@ export default function ModuleLibraryPage() {
 
   const [previewWidth, setPreviewWidth] = useState(420)
   const [previewCollapsed, setPreviewCollapsed] = useState(false)
+  // AI 设计助手聊天面板
+  const [showAgent, setShowAgent] = useState(false)
 
   const filtered = useMemo(() => {
     return moduleLibrary.filter((m) => {
@@ -138,10 +161,8 @@ export default function ModuleLibraryPage() {
     })
   }, [moduleLibrary, search, activeCategory])
 
-  const categories = useMemo(() => {
-    const set = new Set(moduleLibrary.map((m) => m.category))
-    return ['全部', ...Array.from(set)]
-  }, [moduleLibrary])
+  // 分类筛选：固定展示全部 9 个标准分类（含暂无模块的分类）
+  const categories = CATEGORIES
 
   const handleCreateModule = () => {
     setEditingModule({ name: '', description: '', category: '其他', fields: [] })
@@ -161,6 +182,7 @@ export default function ModuleLibraryPage() {
       description: editingModule.description,
       category: editingModule.category || '其他',
       fields: editingModule.fields || [],
+      fieldLayout: editingModule.fieldLayout,
       isSystem: false,
       createdAt: editingModule.createdAt || now(),
       updatedAt: now(),
@@ -191,6 +213,9 @@ export default function ModuleLibraryPage() {
         { label: '选项1', value: 'opt1' },
         { label: '选项2', value: 'opt2' },
       ]
+    }
+    if (type === 'treeSelect') {
+      newField.treeOptions = DEFAULT_TREE_OPTIONS
     }
     addModuleLibraryField(selectedModule.id, newField)
     setSelectedModule((prev) => (prev ? { ...prev, fields: [...prev.fields, newField] } : null))
@@ -365,18 +390,17 @@ export default function ModuleLibraryPage() {
 
   return (
     <div className="space-y-5">
-      {/* 标题栏 */}
+      {/* 说明 + 操作栏 */}
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-bold text-slate-800 flex items-center gap-2">
-            <Package className="w-5 h-5 text-teal-600" />
-            模块库
-          </h1>
-          <p className="text-sm text-slate-400 mt-0.5">管理可复用的 CRF 模块，支持拖拽组合到访视中</p>
+        <p className="text-sm text-slate-400">管理可复用的 CRF 模块，支持拖拽组合到访视中</p>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" className="border-teal-200 text-teal-600 hover:bg-teal-50" onClick={() => setShowAgent(true)}>
+            <Sparkles className="w-4 h-4 mr-1" /> AI 设计助手
+          </Button>
+          <Button className="bg-teal-500 hover:bg-teal-600" onClick={handleCreateModule}>
+            <Plus className="w-4 h-4 mr-1" /> 新建模块
+          </Button>
         </div>
-        <Button className="bg-teal-500 hover:bg-teal-600" onClick={handleCreateModule}>
-          <Plus className="w-4 h-4 mr-1" /> 新建模块
-        </Button>
       </div>
 
       {/* 搜索与分类 */}
@@ -627,27 +651,24 @@ export default function ModuleLibraryPage() {
               </Button>
             </div>
 
-            {/* 字段设计区：左侧组件库 + 中间设计画布 + 右侧实时预览 */}
-            <div className="flex-1 flex">
-              {/* 左侧：字段类型组件库 */}
-              <aside className="w-44 border-r border-slate-100 bg-slate-50 flex flex-col flex-shrink-0 sticky top-0 self-start h-fit max-h-full overflow-y-auto">
-                <div className="px-3 py-2.5 border-b border-slate-100">
-                  <span className="text-xs font-semibold text-slate-500">字段组件</span>
-                </div>
-                <div className="flex-1 overflow-y-auto p-2 space-y-1">
-                  {(Object.keys(FIELD_TYPE_LABELS) as FieldType[]).map((type) => (
-                    <button
-                      key={type}
-                      className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-md text-sm text-slate-600 hover:bg-white hover:shadow-sm hover:text-teal-600 transition-all border border-transparent hover:border-slate-200"
-                      onClick={() => handleAddFieldByType(type)}
-                    >
-                      <span className="text-slate-400">{FIELD_TYPE_ICONS[type]}</span>
-                      <span>{FIELD_TYPE_LABELS[type]}</span>
-                    </button>
-                  ))}
-                </div>
-              </aside>
+            {/* 字段设计区：顶部组件工具条 + 中间设计画布 + 右侧实时预览 */}
+            <div className="flex-1 flex flex-col">
+              {/* 顶部：字段类型组件工具条 */}
+              <div className="border-b border-slate-100 bg-slate-50 px-3 py-2 flex items-center gap-1.5 flex-wrap flex-shrink-0">
+                <span className="text-xs font-semibold text-slate-500 mr-1">字段组件</span>
+                {(Object.keys(FIELD_TYPE_LABELS) as FieldType[]).filter((t) => !COLUMN_ONLY_TYPES.includes(t)).map((type) => (
+                  <button
+                    key={type}
+                    className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs text-slate-600 bg-white border border-slate-200 hover:border-teal-300 hover:text-teal-600 hover:shadow-sm transition-all"
+                    onClick={() => handleAddFieldByType(type)}
+                  >
+                    <span className="text-slate-400">{FIELD_TYPE_ICONS[type]}</span>
+                    <span>{FIELD_TYPE_LABELS[type]}</span>
+                  </button>
+                ))}
+              </div>
 
+              <div className="flex-1 flex min-h-0">
               {/* 中间：字段设计画布 */}
               <main className="flex-1 overflow-y-auto bg-white p-4 min-w-0">
                 {selectedModule.fields.length === 0 ? (
@@ -656,7 +677,7 @@ export default function ModuleLibraryPage() {
                       <FileText className="w-6 h-6 text-slate-300" />
                     </div>
                     <p className="text-sm text-slate-400 mb-1">暂无字段</p>
-                    <p className="text-xs text-slate-300">点击左侧字段组件开始设计</p>
+                    <p className="text-xs text-slate-300">点击上方字段组件开始设计</p>
                   </div>
                 ) : (
                   <div className="space-y-3 max-w-2xl mx-auto">
@@ -680,21 +701,21 @@ export default function ModuleLibraryPage() {
                             } ${dragFieldId === field.id ? 'opacity-50' : ''}`}
                           >
                             {/* 字段头部 */}
-                            <div className="flex items-center justify-between px-4 py-2.5 border-b border-slate-50 bg-slate-50/50 rounded-t-lg">
-                              <div className="flex items-center gap-2.5">
-                                <GripVertical className="w-3.5 h-3.5 text-slate-300" />
-                                <span className="text-xs text-slate-400 font-mono">#{idx + 1}</span>
-                                <span className="text-slate-400">{FIELD_TYPE_ICONS[field.type]}</span>
-                                <span className="font-medium text-sm text-slate-700">{field.label}</span>
+                            <div className="flex items-center justify-between gap-2 px-4 py-2.5 border-b border-slate-50 bg-slate-50/50 rounded-t-lg">
+                              <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                                <GripVertical className="w-3.5 h-3.5 text-slate-300 shrink-0" />
+                                <span className="text-xs text-slate-400 font-mono shrink-0">#{idx + 1}</span>
+                                <span className="text-slate-400 shrink-0">{FIELD_TYPE_ICONS[field.type]}</span>
+                                <span className="font-medium text-sm text-slate-700 truncate min-w-0" title={field.label}>{field.label}</span>
                                 {field.validation?.required && (
-                                  <span className="text-red-400 text-xs">*</span>
+                                  <span className="text-red-400 text-xs shrink-0">*</span>
                                 )}
-                                <Badge variant="outline" className="text-[10px] h-4 px-1.5">
+                                <Badge variant="outline" className="text-[10px] h-4 px-1.5 shrink-0 whitespace-nowrap">
                                   {FIELD_TYPE_LABELS[field.type]}
                                 </Badge>
-                                <span className="text-xs text-slate-400 font-mono">{field.name}</span>
+                                <span className="text-xs text-slate-400 font-mono truncate min-w-0 max-w-36" title={field.name}>{field.name}</span>
                               </div>
-                              <div className="flex items-center gap-0.5">
+                              <div className="flex items-center gap-0.5 shrink-0">
                                 {isEditing ? (
                                   <>
                                     <Button
@@ -824,6 +845,33 @@ export default function ModuleLibraryPage() {
                       </Button>
                     </div>
                   </div>
+                  {/* 字段布局切换：即时保存并刷新预览 */}
+                  <div className="px-4 py-2 border-b border-slate-100 bg-white flex items-center gap-2">
+                    <span className="text-[10px] text-slate-400 shrink-0">字段布局</span>
+                    <div className="flex gap-1 flex-1">
+                      {([
+                        ['vertical', '上下结构'],
+                        ['horizontal', '左右结构'],
+                      ] as const).map(([v, label]) => (
+                        <button
+                          key={v}
+                          type="button"
+                          onClick={() => {
+                            const updated = { ...selectedModule, fieldLayout: v, updatedAt: now() }
+                            saveModuleLibraryItem(updated)
+                            setSelectedModule(updated)
+                          }}
+                          className={`flex-1 h-6 rounded border text-[10px] font-medium transition-colors ${
+                            (selectedModule.fieldLayout ?? 'vertical') === v
+                              ? 'border-teal-500 bg-teal-50 text-teal-700'
+                              : 'border-slate-200 text-slate-400 hover:border-slate-300'
+                          }`}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                   <div className="flex-1 overflow-y-auto p-4">
                     {selectedModule.fields.length === 0 ? (
                       <div className="text-center py-12">
@@ -836,6 +884,7 @@ export default function ModuleLibraryPage() {
                         <CRFFormRenderer
                           sections={[]}
                           fields={selectedModule.fields}
+                          fieldLayout={selectedModule.fieldLayout}
                           onChange={(data) => {
                             // 预览模式不保存数据，仅展示交互效果
                             console.log('preview data', data)
@@ -846,14 +895,15 @@ export default function ModuleLibraryPage() {
                   </div>
                 </aside>
               )}
+              </div>
             </div>
-</div>
+        </div>
         )}
       </div>
 
       {/* 模块信息编辑弹窗 */}
       <Dialog open={showModuleDialog} onOpenChange={setShowModuleDialog}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{editingModule?.id ? '编辑模块' : '新建模块'}</DialogTitle>
           </DialogHeader>
@@ -897,6 +947,29 @@ export default function ModuleLibraryPage() {
                 }
               />
             </div>
+            <div>
+              <Label className="text-sm">字段布局</Label>
+              <div className="flex gap-2 mt-1.5">
+                {([
+                  ['vertical', '上下结构'],
+                  ['horizontal', '左右结构'],
+                ] as const).map(([v, label]) => (
+                  <button
+                    key={v}
+                    type="button"
+                    onClick={() => setEditingModule((prev) => (prev ? { ...prev, fieldLayout: v } : null))}
+                    className={`flex-1 h-8 rounded-md border text-xs font-medium transition-colors ${
+                      (editingModule?.fieldLayout ?? 'vertical') === v
+                        ? 'border-teal-500 bg-teal-50 text-teal-700'
+                        : 'border-slate-200 text-slate-500 hover:border-slate-300'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              <p className="text-[11px] text-slate-400 mt-1.5">左右结构：字段标题在左、输入框在右；宽组件（表格/富文本/附件等）仍自动占满整行</p>
+            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowModuleDialog(false)}>
@@ -912,6 +985,139 @@ export default function ModuleLibraryPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* AI 设计助手：对话生成模块草稿 → 预览 → 确认入库 */}
+      <ModuleAgentChat
+        open={showAgent}
+        library={moduleLibrary}
+        onClose={() => setShowAgent(false)}
+        onSave={(item) => {
+          saveModuleLibraryItem(item)
+          setSelectedModule(item)
+        }}
+        onOpenModule={(m) => {
+          setSelectedModule(m)
+          setShowAgent(false)
+        }}
+      />
+    </div>
+  )
+}
+
+// ==================== 树形选项可视化编辑器 ====================
+
+function TreeOptionsEditor({
+  nodes,
+  onChange,
+  depth = 0,
+}: {
+  nodes: TreeOption[]
+  onChange: (nodes: TreeOption[]) => void
+  depth?: number
+}) {
+  const updateNode = (idx: number, patch: Partial<TreeOption>) => {
+    onChange(nodes.map((n, i) => (i === idx ? { ...n, ...patch } : n)))
+  }
+  const removeNode = (idx: number) => {
+    onChange(nodes.filter((_, i) => i !== idx))
+  }
+  const moveNode = (idx: number, dir: -1 | 1) => {
+    const j = idx + dir
+    if (j < 0 || j >= nodes.length) return
+    const next = [...nodes]
+    ;[next[idx], next[j]] = [next[j], next[idx]]
+    onChange(next)
+  }
+  const makeNode = (): TreeOption => ({
+    label: '新选项',
+    value: `n_${genId().slice(0, 8)}`,
+  })
+  const addSibling = () => onChange([...nodes, makeNode()])
+  const addChild = (idx: number) => {
+    const target = nodes[idx]
+    updateNode(idx, { children: [...(target.children || []), makeNode()] })
+  }
+
+  return (
+    <div className="space-y-1.5">
+      {nodes.map((n, idx) => (
+        <div key={idx} className="space-y-1.5">
+          <div
+            className="flex items-center gap-1.5"
+            style={{ paddingLeft: depth * 22 }}
+          >
+            {depth > 0 && <span className="text-slate-300 flex-shrink-0">└</span>}
+            <Input
+              placeholder="名称"
+              className="h-7 text-xs flex-1 min-w-0"
+              value={n.label}
+              onChange={(e) => updateNode(idx, { label: e.target.value })}
+            />
+            <Input
+              placeholder="值"
+              className="h-7 text-xs w-24 flex-shrink-0 font-mono"
+              value={n.value}
+              onChange={(e) => updateNode(idx, { value: e.target.value })}
+            />
+            <div className="flex items-center gap-0.5 flex-shrink-0">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="w-5 h-5 text-slate-400 hover:text-teal-600"
+                title="添加下一级"
+                onClick={() => addChild(idx)}
+              >
+                <Plus className="w-3 h-3" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="w-5 h-5"
+                title="上移"
+                disabled={idx === 0}
+                onClick={() => moveNode(idx, -1)}
+              >
+                <ChevronUp className="w-3 h-3" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="w-5 h-5"
+                title="下移"
+                disabled={idx === nodes.length - 1}
+                onClick={() => moveNode(idx, 1)}
+              >
+                <ChevronDown className="w-3 h-3" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="w-5 h-5 text-slate-400 hover:text-red-500"
+                title="删除（含下级）"
+                onClick={() => removeNode(idx)}
+              >
+                <Trash2 className="w-3 h-3" />
+              </Button>
+            </div>
+          </div>
+          {n.children && n.children.length > 0 && (
+            <TreeOptionsEditor
+              nodes={n.children}
+              onChange={(children) => updateNode(idx, { children })}
+              depth={depth + 1}
+            />
+          )}
+        </div>
+      ))}
+      <button
+        type="button"
+        className="flex items-center gap-1 text-xs text-teal-600 hover:text-teal-700 border border-dashed border-teal-300 rounded px-2 py-1 hover:bg-teal-50"
+        style={{ marginLeft: depth * 22 }}
+        onClick={addSibling}
+      >
+        <Plus className="w-3 h-3" />
+        {depth === 0 ? '添加选项' : '添加同级'}
+      </button>
     </div>
   )
 }
@@ -952,6 +1158,7 @@ function FieldInlineEditor({
   const isNumber = field.type === 'number'
   const isText = field.type === 'text' || field.type === 'textarea'
   const isTable = field.type === 'table'
+  const isTree = field.type === 'treeSelect'
   return (
     <div className="p-4 space-y-4 bg-slate-50/50">
       {/* 基础信息 */}
@@ -1038,7 +1245,7 @@ function FieldInlineEditor({
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {Object.entries(FIELD_TYPE_LABELS).map(([value, label]) => (
+              {Object.entries(FIELD_TYPE_LABELS).filter(([v]) => !COLUMN_ONLY_TYPES.includes(v as FieldType)).map(([value, label]) => (
                 <SelectItem key={value} value={value}>
                   {label}
                 </SelectItem>
@@ -1058,14 +1265,30 @@ function FieldInlineEditor({
       </div>
 
       {isNumber && (
-        <div>
-          <Label className="text-xs text-slate-500 mb-1 block">单位</Label>
-          <Input
-            className="h-8 text-sm"
-            placeholder="如：年、mmHg、kg..."
-            value={field.unit || ''}
-            onChange={(e) => update({ unit: e.target.value })}
-          />
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <Label className="text-xs text-slate-500 mb-1 block">单位</Label>
+            <Input
+              className="h-8 text-sm"
+              placeholder="如：年、mmHg、kg..."
+              value={field.unit || ''}
+              onChange={(e) => update({ unit: e.target.value })}
+            />
+          </div>
+          <div>
+            <Label className="text-xs text-slate-500 mb-1 block">小数位数</Label>
+            <Input
+              className="h-8 text-sm"
+              type="number"
+              min={0}
+              max={6}
+              placeholder="不限制"
+              value={field.decimals ?? ''}
+              onChange={(e) =>
+                update({ decimals: e.target.value === '' ? undefined : Math.max(0, Number(e.target.value)) })
+              }
+            />
+          </div>
         </div>
       )}
 
@@ -1078,6 +1301,47 @@ function FieldInlineEditor({
           onChange={(e) => update({ helpText: e.target.value })}
         />
       </div>
+
+      {/* 外部数据填充（医院系统抓取） */}
+      {!isTable && !isTree && (
+        <div className="border border-cyan-200/70 rounded-md p-3 space-y-2.5 bg-cyan-50/40">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2 text-xs font-semibold text-slate-600">
+              <Database className="w-3.5 h-3.5 text-cyan-600" />
+              外部数据填充
+            </div>
+            <label className="flex items-center gap-1.5 text-xs text-slate-600 cursor-pointer">
+              <input
+                type="checkbox"
+                className="rounded border-slate-300 text-cyan-600 focus:ring-cyan-500"
+                checked={field.externalFill?.enabled || false}
+                onChange={(e) =>
+                  update({ externalFill: { enabled: e.target.checked, sourceField: field.externalFill?.sourceField } })
+                }
+              />
+              允许医院系统自动填充
+            </label>
+          </div>
+          {field.externalFill?.enabled && (
+            <>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-slate-500 shrink-0">外部字段映射</span>
+                <Input
+                  className="h-7 text-xs flex-1"
+                  placeholder="医院系统字段编码/路径，如 EMR.LAB.WBC"
+                  value={field.externalFill?.sourceField || ''}
+                  onChange={(e) =>
+                    update({ externalFill: { enabled: true, sourceField: e.target.value } })
+                  }
+                />
+              </div>
+              <p className="text-[10px] text-slate-400 leading-relaxed">
+                部署期由数据集成服务按此映射自动抓取填充；录入端自动值将高亮显示，需执行人员核对确认后生效。
+              </p>
+            </>
+          )}
+        </div>
+      )}
 
       {/* 验证规则 */}
       <div className="border border-slate-200 rounded-md p-3 space-y-3 bg-white">
@@ -1469,6 +1733,23 @@ function FieldInlineEditor({
         </div>
       )}
 
+      {/* 树形选项配置（树形选择字段） */}
+      {isTree && (
+        <div className="border border-slate-200 rounded-md p-3 space-y-2 bg-white">
+          <div className="flex items-center gap-2 text-xs font-semibold text-slate-600">
+            <ListTree className="w-3.5 h-3.5" />
+            树形选项
+          </div>
+          <TreeOptionsEditor
+            nodes={field.treeOptions || []}
+            onChange={(treeOptions) => update({ treeOptions })}
+          />
+          <p className="text-[11px] text-slate-400">
+            「名称」为显示文本，「值」为存储编码；点击 + 可添加下一级，支持多级嵌套。
+          </p>
+        </div>
+      )}
+
       {/* 表格列配置 */}
       {isTable && (
         <div className="border border-slate-200 rounded-md p-3 space-y-3 bg-white">
@@ -1477,25 +1758,69 @@ function FieldInlineEditor({
               <Table className="w-3.5 h-3.5" />
               表格列配置
             </div>
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-7 text-xs"
-              onClick={() => {
-                const cols = field.columns || []
-                const newCol: CRFField = {
-                  id: genId(),
-                  type: 'text',
-                  label: `列${cols.length + 1}`,
-                  name: `col${cols.length + 1}`,
-                  order: cols.length,
-                }
-                update({ columns: [...cols, newCol] })
-              }}
-            >
-              <Plus className="w-3 h-3 mr-1" /> 添加列
-            </Button>
+            <div className="flex items-center gap-2">
+              {!field.labConfig && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7 text-xs"
+                  disabled={!field.columns?.some((c) => c.type === 'text')}
+                  title={
+                    field.columns?.some((c) => c.type === 'text')
+                      ? '在预置行清单末尾追加一行（固定首列自动取第一个文本列）'
+                      : '请先添加一个文本列作为固定首列'
+                  }
+                  onClick={() => {
+                    const p = addRowPatch(field)
+                    if (p) update(p)
+                  }}
+                >
+                  <Plus className="w-3 h-3 mr-1" /> 添加行
+                </Button>
+              )}
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 text-xs"
+                onClick={() => {
+                  const cols = field.columns || []
+                  const newCol: CRFField = {
+                    id: genId(),
+                    type: 'text',
+                    label: `列${cols.length + 1}`,
+                    name: `col${cols.length + 1}`,
+                    order: cols.length,
+                  }
+                  update({ columns: [...cols, newCol] })
+                }}
+              >
+                <Plus className="w-3 h-3 mr-1" /> 添加列
+              </Button>
+            </div>
           </div>
+          {/* 表格级开关：自动序号列（录入端首列自动显示行号，只读，随增删行自动重排） */}
+          <label className="flex items-center gap-1.5 text-[10px] text-slate-500 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              className="accent-teal-500"
+              checked={!!field.autoRowNumber}
+              onChange={(e) => update({ autoRowNumber: e.target.checked || undefined })}
+            />
+            自动序号列：表格首列自动显示行号（录入端只读，随增删行自动重排）
+          </label>
+          {/* 表格级配置：状态随日期自动更新 */}
+          <AutoStatusConfigEditor
+            columns={field.columns || []}
+            value={field.autoStatus}
+            onChange={(v) => update({ autoStatus: v })}
+          />
+          {/* 表格级配置：行设置（自由行/预置行）+ 跨访视矩阵（实验室模式下隐藏，实验室自带） */}
+          {!field.labConfig && (
+            <RowPresetConfigEditor
+              field={field}
+              onChange={(p) => update(p)}
+            />
+          )}
           <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
             {(field.columns || []).map((col, idx, arr) => (
               <div key={col.id} className="space-y-1">
@@ -1536,6 +1861,9 @@ function FieldInlineEditor({
                           { label: '否', value: 'no' },
                         ]
                       }
+                      if (newType === 'treeSelect' && (!col.treeOptions || col.treeOptions.length === 0)) {
+                        updates.treeOptions = DEFAULT_TREE_OPTIONS
+                      }
                       newCols[idx] = { ...newCols[idx], ...updates }
                       update({ columns: newCols })
                     }}
@@ -1545,7 +1873,11 @@ function FieldInlineEditor({
                     <option value="number">数字</option>
                     <option value="date">日期</option>
                     <option value="select">下拉选择</option>
+                    <option value="treeSelect">树形选择</option>
                     <option value="textarea">多行文本</option>
+                    <option value="unit">单位（自动·只读）</option>
+                    <option value="range">正常值范围（自动·只读）</option>
+                    <option value="flag">判定状态（自动·只读）</option>
                   </select>
                   <div className="col-span-2 flex items-center justify-end gap-0.5">
                     <Button
@@ -1587,6 +1919,16 @@ function FieldInlineEditor({
                     </Button>
                   </div>
                 </div>
+
+                {/* 单位/正常值范围/判定状态列：只读自动列说明 */}
+                {(col.type === 'unit' || col.type === 'range' || col.type === 'flag') && (
+                  <div className="ml-6 text-[10px] text-slate-400">
+                    只读自动列：录入端按该行「项目」与「检测日期」自动匹配生效版本——单位/范围自动显示，判定状态自动判定 ↑偏高/↓偏低；执行人员上传参考范围后生效
+                    {!(field.columns || []).some((c) => c.type === 'text') && (
+                      <span className="text-amber-500 block">⚠ 表格还没有文本列作为项目列，请先添加一列单行文本</span>
+                    )}
+                  </div>
+                )}
 
                 {/* 下拉选项配置（仅select类型显示） */}
                 {col.type === 'select' && (
@@ -1658,8 +2000,27 @@ function FieldInlineEditor({
                     </div>
                   </div>
                 )}
+
+                {/* 树形选项配置（仅treeSelect类型显示） */}
+                {col.type === 'treeSelect' && (
+                  <div className="ml-6 p-2 rounded-md border border-slate-100 bg-white space-y-1.5">
+                    <span className="text-[10px] text-slate-400">树形选项</span>
+                    <TreeOptionsEditor
+                      nodes={col.treeOptions || []}
+                      onChange={(treeOptions) => {
+                        const newCols = [...(field.columns || [])]
+                        newCols[idx] = { ...newCols[idx], treeOptions }
+                        update({ columns: newCols })
+                      }}
+                    />
+                  </div>
+                )}
               </div>
             ))}          </div>
+          {/* 实验室类表格配置指引：能力已融入列类型与行配置，不再单独设模式 */}
+          <div className="pt-1 border-t border-slate-100 text-[10px] text-slate-400 leading-relaxed">
+            配置实验室检查：列类型加「单位 / 正常值范围 / 判定状态」，用上方「+ 添加行」预置检验项目即可；参考范围由执行人员在录入端上传（含生效日期），系统按检测日期自动匹配版本并判定偏高/偏低
+          </div>
         </div>
       )}
 

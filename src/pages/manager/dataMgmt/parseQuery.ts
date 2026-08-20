@@ -1,5 +1,5 @@
 import type { Patient, Project } from '@/types'
-import { PATIENT_STATUS_LABELS } from './shared'
+import { PATIENT_STATUS_LABELS, analysisFields } from './shared'
 
 // ==================== 文字查询 · 结构化语义解析 ====================
 // 规则式解析：从项目 CRF 结构自动构建词典，贪心最长匹配。
@@ -67,9 +67,9 @@ function buildCandidates(project: Project, patients: Patient[]): Candidate[] {
     push({ text: m.name, cond: { kind: 'module', label: `模块：${m.name}`, moduleId: m.id } })
   }
 
-  // 字段选项（选项文本 → 该字段=该选项；同时隐含切入所属模块）
+  // 字段选项（选项文本 → 该字段=该选项；同时隐含切入所属模块；含动态表格列）
   for (const m of project.crfModules) {
-    for (const f of m.fields) {
+    for (const f of analysisFields(m)) {
       if ((f.type === 'select' || f.type === 'radio' || f.type === 'checkbox') && f.options) {
         for (const o of f.options) {
           push({
@@ -83,8 +83,8 @@ function buildCandidates(project: Project, patients: Patient[]): Candidate[] {
       }
       // 同义词：字段名含「关系」（如 与试验药物关系）→ “药物相关”系列说法
       if (f.label.includes('关系') && f.options) {
-        const related = f.options.find((o) => o.label === '有关')
-        const maybe = f.options.find((o) => o.label === '可能有关')
+        const related = f.options.find((o) => o.label === '有关' || o.label === '相关')
+        const maybe = f.options.find((o) => o.label === '可能有关' || o.label === '可能相关')
         if (related) {
           for (const t of ['药物相关', '研究药物相关', '试验药物相关', '和药物相关', '和试验药物相关', '和研究药物相关']) {
             push({

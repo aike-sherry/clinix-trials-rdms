@@ -8,11 +8,12 @@ import {
 } from '@/components/ui/select'
 import { Filter, Plus, Trash2, Download, FileSpreadsheet, Users, RotateCcw } from 'lucide-react'
 import { useAppStorage } from '@/hooks/useAppStorage'
-import type { CRFField, Patient, Project } from '@/types'
+import type { Patient, Project } from '@/types'
 import {
   PATIENT_STATUS_LABELS, PATIENT_STATUS_COLORS,
   NUM_OPS, TEXT_OPS, type Operator,
-  calcAge, displayValue, matchCondition, downloadCsv, dateTag,
+  calcAge, displayValue, cellText, matchCondition, downloadCsv, dateTag,
+  analysisFields, explodeRows, type AnalysisField,
 } from './shared'
 
 interface Condition {
@@ -93,7 +94,7 @@ export default function AdvancedQuery() {
       if (dateTo && (p.enrollmentDate || '') > dateTo) return false
       for (const cond of conditions) {
         const module = project?.crfModules.find((m) => m.id === cond.moduleId)
-        const field = module?.fields.find((f) => f.name === cond.fieldName)
+        const field = module ? analysisFields(module).find((f) => f.name === cond.fieldName) : undefined
         if (!module || !field) continue
         const records = visitData.filter(
           (vd) => vd.patientId === p.id && vd.moduleId === cond.moduleId,
@@ -109,22 +110,32 @@ export default function AdvancedQuery() {
     [patients, project],
   )
 
-  /** 条件涉及字段的显示值：优先取命中条件的记录，否则取最新记录 */
-  const condFieldOf = (cond: Condition): CRFField | undefined =>
-    project?.crfModules.find((m) => m.id === cond.moduleId)?.fields.find((f) => f.name === cond.fieldName)
+  /** 条件涉及字段（含动态表格展开列） */
+  const condFieldOf = (cond: Condition): AnalysisField | undefined => {
+    const module = project?.crfModules.find((m) => m.id === cond.moduleId)
+    return module ? analysisFields(module).find((f) => f.name === cond.fieldName) : undefined
+  }
 
-  const condDisplayValue = (patient: Patient, cond: Condition): unknown => {
+  /** 条件字段的患者维度显示文本：表格列取全部命中行的列值去重拼接，普通字段取最新/命中记录值 */
+  const condText = (patient: Patient, cond: Condition): string => {
+    const module = project?.crfModules.find((m) => m.id === cond.moduleId)
     const field = condFieldOf(cond)
-    if (!field) return undefined
+    if (!module || !field) return ''
     const records = visitData
       .filter((vd) => vd.patientId === patient.id && vd.moduleId === cond.moduleId)
       .sort((a, b) => a.updatedAt.localeCompare(b.updatedAt))
-    if (records.length === 0) return undefined
+    if (records.length === 0) return ''
     const matched = records.filter((rec) =>
       matchCondition([rec], field, cond.operator, cond.value),
     )
     const source = matched.length > 0 ? matched[matched.length - 1] : records[records.length - 1]
-    return source.data[cond.fieldName]
+    if (field.tableName) {
+      const vals = explodeRows(module, source)
+        .map((r) => cellText(field, r[field.name]))
+        .filter((t) => t && t !== '-')
+      return Array.from(new Set(vals)).join('；')
+    }
+    return displayValue(field, source.data[cond.fieldName])
   }
 
   // ---------- 导出 ----------
@@ -146,7 +157,7 @@ export default function AdvancedQuery() {
         centers.find((c) => c.id === p.centerId)?.name ?? '',
         PATIENT_STATUS_LABELS[p.status] ?? p.status, p.currentVisit ?? '',
         p.consentDate ?? '', p.enrollmentDate ?? '',
-        ...conditions.map((c) => displayValue(condFieldOf(c), condDisplayValue(p, c))),
+        ...conditions.map((c) => condText(p, c)),
       ]
     })
     downloadCsv(`患者清单_${dateTag()}.csv`, [header, ...rows])
@@ -165,17 +176,23 @@ export default function AdvancedQuery() {
       const proj = projects.find((pj) => pj.id === vd.projectId)
       const visit = proj?.visits.find((v) => v.id === vd.visitId)
       const module = proj?.crfModules.find((m) => m.id === vd.moduleId)
-      for (const field of module?.fields ?? []) {
-        const value = vd.data[field.name]
-        if (value === undefined || value === null || value === '') continue
-        rows.push([
-          proj?.projectNo ?? '', patient.screeningId, patient.randomizationId ?? '',
-          patient.nameInitials, PATIENT_STATUS_LABELS[patient.status] ?? patient.status,
-          visit?.code ?? '', visit?.name ?? '', module?.name ?? '',
-          field.label, field.name, displayValue(field, value),
-          vd.status === 'completed' ? '已完成' : vd.status === 'in_progress' ? '录入中' : vd.status,
-          vd.updatedAt.slice(0, 10),
-        ])
+      if (!module) continue
+      const aFields = analysisFields(module).filter(
+        (f) => !['label', 'table', 'richText', 'fileUpload'].includes(f.type),
+      )
+      for (const row of explodeRows(module, vd)) {
+        for (const field of aFields) {
+          const value = row[field.name]
+          if (value === undefined || value === null || value === '') continue
+          rows.push([
+            proj?.projectNo ?? '', patient.screeningId, patient.randomizationId ?? '',
+            patient.nameInitials, PATIENT_STATUS_LABELS[patient.status] ?? patient.status,
+            visit?.code ?? '', visit?.name ?? '', module?.name ?? '',
+            field.label, field.name, cellText(field, value),
+            vd.status === 'completed' ? '已完成' : vd.status === 'in_progress' ? '录入中' : vd.status,
+            vd.updatedAt.slice(0, 10),
+          ])
+        }
       }
     }
     downloadCsv(`访视数据_${dateTag()}.csv`, [header, ...rows])
@@ -189,7 +206,7 @@ export default function AdvancedQuery() {
       <Card>
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between">
-            <CardTitle className="text-base flex items-center gap-2">
+            <CardTitle className="text-sm font-semibold flex items-center gap-2">
               <Filter className="w-4 h-4 text-sky-500" />
               数据筛选
             </CardTitle>
@@ -264,7 +281,11 @@ export default function AdvancedQuery() {
                       value={cond.moduleId}
                       onValueChange={(v) => {
                         const mod = project?.crfModules.find((m) => m.id === v)
-                        const f = mod?.fields.find((x) => x.type !== 'label')
+                        const f = mod
+                          ? analysisFields(mod).find(
+                              (x) => !['label', 'table', 'richText', 'fileUpload'].includes(x.type),
+                            )
+                          : undefined
                         updateCondition(cond.id, { moduleId: v, fieldName: f?.name ?? '', operator: 'eq', value: '' })
                       }}
                     >
@@ -286,7 +307,9 @@ export default function AdvancedQuery() {
                         <SelectValue placeholder="字段" />
                       </SelectTrigger>
                       <SelectContent>
-                        {module?.fields.filter((f) => f.type !== 'label').map((f) => (
+                        {(module ? analysisFields(module) : [])
+                          .filter((f) => !['label', 'table', 'richText', 'fileUpload'].includes(f.type))
+                          .map((f) => (
                           <SelectItem key={f.id} value={f.name}>{f.label}</SelectItem>
                         ))}
                       </SelectContent>
@@ -359,7 +382,7 @@ export default function AdvancedQuery() {
       <Card>
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between">
-            <CardTitle className="text-base flex items-center gap-2">
+            <CardTitle className="text-sm font-semibold flex items-center gap-2">
               <Users className="w-4 h-4 text-sky-500" />
               患者清单
               <span className="text-sm font-normal text-slate-400">
@@ -419,7 +442,7 @@ export default function AdvancedQuery() {
                     <td className="px-4 py-2.5 text-slate-500">{p.enrollmentDate || '-'}</td>
                     {conditions.map((c) => (
                       <td key={c.id} className="px-4 py-2.5 text-slate-700 whitespace-nowrap">
-                        {displayValue(condFieldOf(c), condDisplayValue(p, c))}
+                        {condText(p, c) || '-'}
                       </td>
                     ))}
                   </tr>

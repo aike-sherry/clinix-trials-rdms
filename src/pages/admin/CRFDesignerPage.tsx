@@ -1,6 +1,7 @@
 import { useState, useMemo, Component, type ReactNode } from 'react'
 import { useAppStorage } from '@/hooks/useAppStorage'
 import type { CRFField, CRFModule, Project, Visit } from '@/types'
+import { DEFAULT_TREE_OPTIONS } from '@/types'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -11,8 +12,11 @@ import CRFFormRenderer from '@/components/CRFFormRenderer'
 import {
   Plus, Trash2, Pencil, ChevronDown, ChevronRight, ChevronLeft,
   Hash, Type, Calendar, ListChecks, ToggleLeft, AlignLeft, FileText,
-  FlaskConical, Eye, Package, Copy, Check
+  FlaskConical, Eye, Package, Copy, Check, Sparkles,
+  SlidersHorizontal, ArrowLeftRight, Table, Pen, CalendarRange, ListTree, TextQuote, Paperclip
 } from 'lucide-react'
+import { CRFAgentChat } from '@/components/CRFAgentChat'
+import type { CRFPlan } from '@/utils/crfAgent'
 
 // ==================== 常量 ====================
 const FIELD_TYPE_ICONS: Record<string, React.ReactNode> = {
@@ -21,17 +25,27 @@ const FIELD_TYPE_ICONS: Record<string, React.ReactNode> = {
   number: <Hash className="w-3.5 h-3.5" />,
   date: <Calendar className="w-3.5 h-3.5" />,
   datetime: <Calendar className="w-3.5 h-3.5" />,
+  dateRange: <CalendarRange className="w-3.5 h-3.5" />,
   select: <ListChecks className="w-3.5 h-3.5" />,
   radio: <ListChecks className="w-3.5 h-3.5" />,
   checkbox: <ListChecks className="w-3.5 h-3.5" />,
+  treeSelect: <ListTree className="w-3.5 h-3.5" />,
   toggle: <ToggleLeft className="w-3.5 h-3.5" />,
   label: <FileText className="w-3.5 h-3.5" />,
+  table: <Table className="w-3.5 h-3.5" />,
+  scale: <SlidersHorizontal className="w-3.5 h-3.5" />,
+  numberRange: <ArrowLeftRight className="w-3.5 h-3.5" />,
+  signature: <Pen className="w-3.5 h-3.5" />,
+  richText: <TextQuote className="w-3.5 h-3.5" />,
+  fileUpload: <Paperclip className="w-3.5 h-3.5" />,
 }
 
 const FIELD_TYPE_LABELS: Record<string, string> = {
   text: '单行文本', textarea: '多行文本', number: '数字', date: '日期',
-  datetime: '日期时间', select: '下拉选择', radio: '单选', checkbox: '多选',
-  toggle: '开关', label: '说明文本',
+  datetime: '日期时间', dateRange: '时间段', select: '下拉选择', radio: '单选', checkbox: '多选',
+  treeSelect: '树形选择', toggle: '开关', label: '说明文本', table: '表格（动态多行）',
+  scale: '量表评分', numberRange: '数值范围', signature: '电子签名',
+  richText: '富文本', fileUpload: '文件上传',
 }
 
 function genId() {
@@ -88,16 +102,22 @@ export default function CRFDesignerPage() {
         </div>
         <div className="w-px h-5 bg-slate-200" />
         <Select value={selectedProjectId} onValueChange={setSelectedProjectId}>
-          <SelectTrigger className="w-80 h-8 text-sm">
-            <SelectValue placeholder="选择项目" />
+          <SelectTrigger className="w-44 h-8 text-sm">
+            <SelectValue placeholder="选择研究编号" />
           </SelectTrigger>
           <SelectContent>
             {projects.length === 0 && <SelectItem value="" disabled>暂无项目</SelectItem>}
             {projects.map((p) => (
-              <SelectItem key={p.id} value={p.id}>{p.projectNo} · {p.name}</SelectItem>
+              <SelectItem key={p.id} value={p.id}>{p.projectNo}</SelectItem>
             ))}
           </SelectContent>
         </Select>
+        {/* 研究标题：随编号联动，完整展示不截断 */}
+        {project && (
+          <span className="text-sm text-slate-600 font-medium truncate max-w-[420px]" title={project.name}>
+            {project.name}
+          </span>
+        )}
         {project && (
           <Badge variant="outline" className="bg-teal-50 text-teal-600 border-teal-200 text-xs">
             {project.visits.length} 访视 · {project.crfModules.length} 模块
@@ -124,7 +144,7 @@ export default function CRFDesignerPage() {
 
 // ==================== 核心设计器 ====================
 function CRFDesignerCore({ project, onSave }: { project: Project; onSave: (p: Project) => void }) {
-  const { moduleLibrary } = useAppStorage()
+  const { moduleLibrary, saveModuleLibraryItem } = useAppStorage()
   const [selectedVisitId, setSelectedVisitId] = useState<string>('')
   const [selectedModuleId, setSelectedModuleId] = useState<string>('')
   const [expandedVisits, setExpandedVisits] = useState<Set<string>>(new Set(project.visits.map((v) => v.id)))
@@ -144,6 +164,9 @@ function CRFDesignerCore({ project, onSave }: { project: Project; onSave: (p: Pr
   const [librarySearch, setLibrarySearch] = useState('')
   const [libraryCategory, setLibraryCategory] = useState('全部')
   const [selectedLibraryModuleIds, setSelectedLibraryModuleIds] = useState<Set<string>>(new Set())
+
+  // CRF 组装助手聊天面板
+  const [showCRFAgent, setShowCRFAgent] = useState(false)
 
   const updateProject = (updater: (p: Project) => Project) => {
     const next = updater({ ...project })
@@ -253,6 +276,7 @@ function CRFDesignerCore({ project, onSave }: { project: Project; onSave: (p: Pr
       description: libModule.description,
       fields: libModule.fields.map((f) => ({ ...f, id: genId() })),
       order: project.crfModules.length + modulesToImport.indexOf(libModule),
+      fieldLayout: libModule.fieldLayout,
     }))
 
     updateProject((p) => ({
@@ -268,6 +292,64 @@ function CRFDesignerCore({ project, onSave }: { project: Project; onSave: (p: Pr
       const next = new Set(prev)
       if (next.has(id)) next.delete(id)
       else next.add(id)
+      return next
+    })
+  }
+
+  // ---------- CRF 组装助手：应用挂载/移除计划 ----------
+  const applyCRFPlan = (plan: CRFPlan) => {
+    // 移除模式：仅从访视中移除挂载，模块保留在研究中
+    if (plan.mode === 'remove') {
+      updateProject((p) => ({
+        ...p,
+        visits: p.visits.map((v) => {
+          const pi = plan.items.find((i) => i.visitId === v.id)
+          if (!pi) return v
+          const removeIds = pi.modules
+            .filter((m) => !m.notMounted && m.source !== 'missing' && m.refId)
+            .map((m) => m.refId!)
+          return removeIds.length ? { ...v, crfModuleIds: v.crfModuleIds.filter((id) => !removeIds.includes(id)) } : v
+        }),
+      }))
+      return
+    }
+    updateProject((p) => {
+      // 1) 库模块导入（同一库模块只导入一次）
+      const libIdMap = new Map<string, string>()
+      const newModules: CRFModule[] = []
+      for (const item of plan.items) {
+        for (const m of item.modules) {
+          if (m.source !== 'library' || !m.refId || libIdMap.has(m.refId)) continue
+          const lib = moduleLibrary.find((x) => x.id === m.refId)
+          if (!lib) continue
+          const id = genId()
+          libIdMap.set(m.refId, id)
+          newModules.push({
+            id,
+            projectId: p.id,
+            name: lib.name,
+            description: lib.description,
+            fields: lib.fields.map((f) => ({ ...f, id: genId() })),
+            order: p.crfModules.length + newModules.length,
+            fieldLayout: lib.fieldLayout,
+          })
+        }
+      }
+      // 2) 更新访视挂载（跳过已挂载）
+      const visits = p.visits.map((v) => {
+        const pi = plan.items.find((i) => i.visitId === v.id)
+        if (!pi) return v
+        const addIds = pi.modules
+          .filter((m) => !m.already && m.source !== 'missing')
+          .map((m) => (m.source === 'library' ? libIdMap.get(m.refId!) : m.refId))
+          .filter((id): id is string => !!id && !v.crfModuleIds.includes(id))
+        return addIds.length ? { ...v, crfModuleIds: [...v.crfModuleIds, ...addIds] } : v
+      })
+      return { ...p, crfModules: [...p.crfModules, ...newModules], visits }
+    })
+    setExpandedVisits((prev) => {
+      const next = new Set(prev)
+      plan.items.forEach((i) => next.add(i.visitId))
       return next
     })
   }
@@ -308,6 +390,18 @@ function CRFDesignerCore({ project, onSave }: { project: Project; onSave: (p: Pr
     }
     if (type === 'select' || type === 'radio' || type === 'checkbox') {
       f.options = [{ label: '选项1', value: 'opt1' }, { label: '选项2', value: 'opt2' }]
+    }
+    if (type === 'treeSelect') {
+      f.treeOptions = DEFAULT_TREE_OPTIONS
+    }
+    if (type === 'table') {
+      f.columns = [
+        { id: genId(), type: 'text', label: '列1', name: 'col1', order: 1 },
+        { id: genId(), type: 'text', label: '列2', name: 'col2', order: 2 },
+      ]
+    }
+    if (type === 'scale') {
+      f.scaleConfig = { min: 0, max: 10, step: 1 }
     }
     updateProject((p) => ({
       ...p,
@@ -382,6 +476,16 @@ function CRFDesignerCore({ project, onSave }: { project: Project; onSave: (p: Pr
             <Button variant="ghost" size="sm" className="h-6 text-[10px] px-1.5" onClick={expandAll}>全展开</Button>
             <Button variant="ghost" size="sm" className="h-6 text-[10px] px-1.5" onClick={collapseAll}>全折叠</Button>
           </div>
+        </div>
+
+        {/* AI 组装入口 */}
+        <div className="px-3 py-2 border-b border-slate-100">
+          <Button
+            className="w-full h-8 text-xs bg-gradient-to-r from-teal-500 to-cyan-500 hover:from-teal-600 hover:to-cyan-600 text-white"
+            onClick={() => setShowCRFAgent(true)}
+          >
+            <Sparkles className="w-3.5 h-3.5 mr-1" /> AI 组装 CRF
+          </Button>
         </div>
 
         {/* 树 */}
@@ -559,14 +663,14 @@ function CRFDesignerCore({ project, onSave }: { project: Project; onSave: (p: Pr
               <div className="flex-1 overflow-y-auto p-5">
                 {[...selectedModule.fields].sort((a, b) => a.order - b.order).map((f, fi) => (
                   <div key={f.id} className="bg-white rounded-lg border border-slate-200 p-4 mb-3 hover:shadow-sm transition-shadow">
-                    <div className="flex items-center justify-between mb-3">
-                      <div className="flex items-center gap-2">
-                        <span className="text-slate-400">{FIELD_TYPE_ICONS[f.type]}</span>
-                        <span className="font-medium text-sm">{f.label}</span>
-                        <span className="text-xs text-slate-400 font-mono">{f.name}</span>
-                        {f.validation?.required && <Badge variant="outline" className="text-[10px] h-4 text-red-500 border-red-200">必填</Badge>}
+                    <div className="flex items-center justify-between gap-2 mb-3">
+                      <div className="flex items-center gap-2 min-w-0 flex-1">
+                        <span className="text-slate-400 shrink-0">{FIELD_TYPE_ICONS[f.type]}</span>
+                        <span className="font-medium text-sm truncate min-w-0" title={f.label}>{f.label}</span>
+                        <span className="text-xs text-slate-400 font-mono truncate min-w-0 max-w-36" title={f.name}>{f.name}</span>
+                        {f.validation?.required && <Badge variant="outline" className="text-[10px] h-4 text-red-500 border-red-200 shrink-0">必填</Badge>}
                       </div>
-                      <div className="flex items-center gap-1">
+                      <div className="flex items-center gap-1 shrink-0">
                         <Button variant="ghost" size="icon" className="w-6 h-6" onClick={() => moveField(fi, -1)} disabled={fi === 0}>
                           <ChevronRight className="w-3 h-3 rotate-180" />
                         </Button>
@@ -674,6 +778,7 @@ function CRFDesignerCore({ project, onSave }: { project: Project; onSave: (p: Pr
                       <CRFFormRenderer
                         sections={[]}
                         fields={selectedModule.fields}
+                        fieldLayout={selectedModule.fieldLayout}
                         onChange={(data) => {
                           console.log('preview data', data)
                         }}
@@ -724,6 +829,31 @@ function CRFDesignerCore({ project, onSave }: { project: Project; onSave: (p: Pr
             <div className="space-y-3 py-2">
               <div><Label className="text-sm">模块名称</Label><Input value={editingModule.name} onChange={(e) => setEditingModule({ ...editingModule, name: e.target.value })} /></div>
               <div><Label className="text-sm">描述</Label><Input value={editingModule.description || ''} onChange={(e) => setEditingModule({ ...editingModule, description: e.target.value })} /></div>
+              <div>
+                <Label className="text-sm">字段布局</Label>
+                <div className="flex items-center gap-1.5 mt-1.5 bg-slate-100 rounded-lg p-1 w-fit">
+                  {(
+                    [
+                      ['vertical', '上下结构'],
+                      ['horizontal', '左右结构'],
+                    ] as const
+                  ).map(([v, l]) => (
+                    <button
+                      key={v}
+                      type="button"
+                      onClick={() => setEditingModule({ ...editingModule, fieldLayout: v })}
+                      className={`px-3 py-1 rounded-md text-xs transition-colors ${
+                        (editingModule.fieldLayout ?? 'vertical') === v
+                          ? 'bg-white text-teal-600 shadow-sm font-medium'
+                          : 'text-slate-500 hover:text-slate-700'
+                      }`}
+                    >
+                      {l}
+                    </button>
+                  ))}
+                </div>
+                <p className="text-[11px] text-slate-400 mt-1.5">左右结构：字段标题在左、输入框在右；宽组件（表格/富文本/附件等）仍自动占满整行</p>
+              </div>
             </div>
             <DialogFooter>
               <Button variant="outline" onClick={() => setShowModuleDialog(false)}>取消</Button>
@@ -845,6 +975,16 @@ function CRFDesignerCore({ project, onSave }: { project: Project; onSave: (p: Pr
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* CRF 组装助手：对话描述访视-模块挂载 → 计划预览 → 确认应用；缺失模块可当场设计入库 */}
+      <CRFAgentChat
+        open={showCRFAgent}
+        project={project}
+        library={moduleLibrary}
+        onClose={() => setShowCRFAgent(false)}
+        onApply={applyCRFPlan}
+        onSaveModule={saveModuleLibraryItem}
+      />
     </div>
   )
 }

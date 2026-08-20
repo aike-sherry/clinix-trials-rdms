@@ -1,6 +1,8 @@
 import { useParams } from 'react-router'
 import { useAppStorage } from '@/hooks/useAppStorage'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import StatCard from '@/components/StatCard'
+import { Info, ClipboardList, UserCheck, CalendarCheck, FileText } from 'lucide-react'
 
 export default function ProjectOverview() {
   const { projectId } = useParams<{ projectId: string }>()
@@ -13,38 +15,21 @@ export default function ProjectOverview() {
 
   return (
     <div className="space-y-4">
+      {/* 统计卡片（全站统一 StatCard） */}
       <div className="grid grid-cols-4 gap-4">
-        <Card>
-          <CardContent className="p-4">
-            <div className="text-sm text-slate-500">筛选例数</div>
-            <div className="text-2xl font-bold text-slate-800">{projectPatients.length}</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <div className="text-sm text-slate-500">入组例数</div>
-            <div className="text-2xl font-bold text-teal-600">
-              {projectPatients.filter((p) => p.status !== 'screening').length}
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <div className="text-sm text-slate-500">访视数</div>
-            <div className="text-2xl font-bold text-slate-800">{project.visits.length}</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <div className="text-sm text-slate-500">CRF模块</div>
-            <div className="text-2xl font-bold text-slate-800">{project.crfModules.length}</div>
-          </CardContent>
-        </Card>
+        <StatCard label="筛选例数" value={projectPatients.length} unit="例" sub="本项目全部受试者" icon={ClipboardList} gradient="from-blue-500 to-blue-600" />
+        <StatCard
+          label="入组例数" value={projectPatients.filter((p) => p.status !== 'screening').length} unit="例"
+          sub={`入组率 ${projectPatients.length > 0 ? Math.round((projectPatients.filter((p) => p.status !== 'screening').length / projectPatients.length) * 100) : 0}%`}
+          icon={UserCheck} gradient="from-teal-500 to-emerald-600"
+        />
+        <StatCard label="访视数" value={project.visits.length} unit="次" sub="访视计划配置" icon={CalendarCheck} gradient="from-violet-500 to-purple-600" />
+        <StatCard label="CRF模块" value={project.crfModules.length} unit="个" sub="已配置数据模块" icon={FileText} gradient="from-amber-500 to-orange-500" />
       </div>
 
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-base">项目基本信息</CardTitle>
+          <CardTitle className="text-sm font-semibold flex items-center gap-2"><Info className="w-4 h-4 text-sky-500" />项目基本信息</CardTitle>
         </CardHeader>
         <CardContent className="grid grid-cols-2 gap-x-8 gap-y-3 text-sm">
           <div className="flex justify-between border-b border-slate-100 pb-2">

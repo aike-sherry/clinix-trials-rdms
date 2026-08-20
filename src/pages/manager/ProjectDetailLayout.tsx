@@ -1,7 +1,8 @@
-import { useParams, Link, Outlet, useLocation, useNavigate } from 'react-router'
+import { useEffect } from 'react'
+import { useParams, Link, Outlet, useLocation, useNavigate, useSearchParams } from 'react-router'
 import { useAppStorage } from '@/hooks/useAppStorage'
+import type { ModuleKey } from '@/types'
 import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
 import {
   Select,
   SelectContent,
@@ -11,37 +12,44 @@ import {
 } from '@/components/ui/select'
 import {
   FileText, BarChart3, Users, Database, PieChart, UserCircle,
-  List
+  List, CalendarCheck, ClipboardCheck, MessageCircleQuestion,
 } from 'lucide-react'
 
-const STATUS_MAP: Record<string, { label: string; color: string }> = {
-  proposal_review: { label: '立项审核', color: 'bg-amber-50 text-amber-600 border-amber-200' },
-  pending: { label: '立项审核', color: 'bg-amber-50 text-amber-600 border-amber-200' },
-  contract_signed: { label: '合同签署', color: 'bg-purple-50 text-purple-600 border-purple-200' },
-  ethics_review: { label: '伦理审核', color: 'bg-green-50 text-green-600 border-green-200' },
-  study_started: { label: '研究启动', color: 'bg-cyan-50 text-cyan-600 border-cyan-200' },
-  active: { label: '研究启动', color: 'bg-cyan-50 text-cyan-600 border-cyan-200' },
-  study_closed: { label: '研究关闭', color: 'bg-gray-50 text-gray-600 border-gray-200' },
-  completed: { label: '研究关闭', color: 'bg-gray-50 text-gray-600 border-gray-200' },
-  suspended: { label: '已暂停', color: 'bg-red-50 text-red-600 border-red-200' },
-}
-
-const tabs = [
+// 项目标签：与管理端导航栏同步；标签内容直接嵌入对应模块页面（按当前项目过滤，不跳转）
+const tabs: { path: string; label: string; icon: typeof FileText; moduleKey?: ModuleKey }[] = [
   { path: 'overview', label: '项目概况', icon: FileText },
   { path: 'progress', label: '进度管理', icon: BarChart3 },
-  { path: 'patients', label: '患者管理', icon: Users },
-  { path: 'data', label: '数据管理', icon: Database },
-  { path: 'stats', label: '统计分析', icon: PieChart },
+  { path: 'patients', label: '患者管理', icon: Users, moduleKey: 'patients' },
+  { path: 'visits', label: '访视管理', icon: CalendarCheck, moduleKey: 'visits' },
+  { path: 'statistics', label: '数据管理', icon: Database, moduleKey: 'dataMgmt' },
+  { path: 'review', label: '数据审核', icon: ClipboardCheck, moduleKey: 'dataMgmt' },
+  { path: 'queries', label: '疑问管理', icon: MessageCircleQuestion, moduleKey: 'queries' },
+  { path: 'data', label: '统计分析', icon: PieChart, moduleKey: 'statistics' },
   { path: 'account', label: '账户管理', icon: UserCircle },
 ]
 
 export default function ProjectDetailLayout() {
   const { projectId } = useParams<{ projectId: string }>()
   const navigate = useNavigate()
-  const { projects, patients } = useAppStorage()
   const location = useLocation()
-
+  const [searchParams, setSearchParams] = useSearchParams()
+  const { projects, currentUser } = useAppStorage()
   const project = projects.find((p) => p.id === projectId)
+
+  // 保证 URL 始终携带当前项目的 projectNo：嵌入的模块页面据此按项目过滤
+  useEffect(() => {
+    if (project && searchParams.get('projectNo') !== project.projectNo) {
+      const next = new URLSearchParams(searchParams)
+      next.set('projectNo', project.projectNo)
+      setSearchParams(next, { replace: true })
+    }
+  }, [project, searchParams, setSearchParams])
+
+  // 模块权限过滤（undefined = 全部开通）
+  const visibleTabs = tabs.filter(
+    (t) => !t.moduleKey || !currentUser?.moduleAccess || currentUser.moduleAccess.includes(t.moduleKey)
+  )
+
   if (!project) {
     return (
       <div className="text-center py-20">
@@ -53,43 +61,49 @@ export default function ProjectDetailLayout() {
     )
   }
 
-  const projectPatients = patients.filter((p) => p.projectId === project.id)
-  const statusInfo = STATUS_MAP[project.status] || STATUS_MAP.proposal_review
+  const activeTab =
+    tabs.find((t) => location.pathname.includes(`/manager/projects/${projectId}/${t.path}`))?.path || 'overview'
 
-  const activeTab = tabs.find((t) => location.pathname.includes(`/manager/projects/${projectId}/${t.path}`))?.path || 'overview'
-
-  // 项目切换
+  // 项目切换：保持当前标签，URL 同步新项目的 projectNo
   const handleProjectChange = (value: string) => {
     if (value === 'all') {
       navigate('/manager/projects')
     } else {
-      // 保持当前 tab，切换到新项目
-      const currentTab = activeTab
-      navigate(`/manager/projects/${value}/${currentTab}`)
+      const target = projects.find((p) => p.id === value)
+      navigate(`/manager/projects/${value}/${activeTab}?projectNo=${target?.projectNo ?? ''}`)
     }
   }
 
   return (
     <div className="space-y-4">
-      {/* 顶部：项目信息 + 项目切换器 */}
-      <div className="flex items-start justify-between">
-        <div className="flex-1">
-          <div className="flex items-center gap-3 mb-1">
-            <h1 className="text-xl font-bold text-slate-800">{project.name}</h1>
-            <Badge variant="outline" className={statusInfo.color}>
-              {statusInfo.label}
-            </Badge>
-          </div>
-          <p className="text-sm text-slate-400">
-            {project.projectNo} · {project.researchCenter} · PI: {project.principalInvestigator}
-          </p>
+      {/* 子导航标签 + 项目切换器（右置） */}
+      <div className="flex items-end justify-between border-b border-slate-200">
+        <div className="flex items-center gap-1">
+          {visibleTabs.map((tab) => {
+            const Icon = tab.icon
+            const isActive = activeTab === tab.path
+            return (
+              <Link
+                key={tab.path}
+                to={`/manager/projects/${projectId}/${tab.path}?projectNo=${project.projectNo}`}
+                className={`flex items-center gap-1.5 px-3 py-2.5 text-[13px] whitespace-nowrap border-b-2 transition-colors ${
+                  isActive
+                    ? 'border-blue-500 text-blue-600 font-medium'
+                    : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'
+                }`}
+              >
+                <Icon className="w-3.5 h-3.5" />
+                {tab.label}
+              </Link>
+            )
+          })}
         </div>
 
         {/* 项目切换下拉框 */}
-        <div className="flex items-center gap-2">
-          <span className="text-sm text-slate-400">当前项目:</span>
+        <div className="flex items-center gap-2 pb-1.5">
+          <span className="text-xs text-slate-400 whitespace-nowrap">当前项目</span>
           <Select value={projectId} onValueChange={handleProjectChange}>
-            <SelectTrigger className="w-72">
+            <SelectTrigger className="w-72 h-8 text-xs">
               <SelectValue placeholder="选择项目" />
             </SelectTrigger>
             <SelectContent>
@@ -110,54 +124,6 @@ export default function ProjectDetailLayout() {
             </SelectContent>
           </Select>
         </div>
-      </div>
-
-      {/* 快捷统计 */}
-      <div className="flex items-center gap-6 text-sm">
-        <div className="flex items-center gap-2">
-          <span className="text-slate-400">主要研究者</span>
-          <span className="font-medium text-slate-700">{project.principalInvestigator || '-'}</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="text-slate-400">研究科室</span>
-          <span className="font-medium text-slate-700">{project.department || '-'}</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="text-slate-400">申办方</span>
-          <span className="font-medium text-slate-700">{project.sponsor || '-'}</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="text-slate-400">筛选例数</span>
-          <span className="font-medium text-slate-700">{projectPatients.length}</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="text-slate-400">入组例数</span>
-          <span className="font-medium text-slate-700">
-            {projectPatients.filter((p) => p.status !== 'screening').length}
-          </span>
-        </div>
-      </div>
-
-      {/* 子导航标签 */}
-      <div className="flex items-center gap-1 border-b border-slate-200">
-        {tabs.map((tab) => {
-          const Icon = tab.icon
-          const isActive = activeTab === tab.path
-          return (
-            <Link
-              key={tab.path}
-              to={`/manager/projects/${projectId}/${tab.path}`}
-              className={`flex items-center gap-1.5 px-4 py-2.5 text-sm border-b-2 transition-colors ${
-                isActive
-                  ? 'border-blue-500 text-blue-600 font-medium'
-                  : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'
-              }`}
-            >
-              <Icon className="w-4 h-4" />
-              {tab.label}
-            </Link>
-          )
-        })}
       </div>
 
       <Outlet />

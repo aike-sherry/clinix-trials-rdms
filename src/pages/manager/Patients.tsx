@@ -1,28 +1,22 @@
-import { useNavigate, useSearchParams } from 'react-router'
+import { useEffect, useMemo, useState } from 'react'
+import { Link, useNavigate, useSearchParams } from 'react-router'
 import { useAppStorage } from '@/hooks/useAppStorage'
+import { usePageSize } from '@/hooks/usePageSize'
+import StatCard from '@/components/StatCard'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
-  FlaskConical, CheckCircle2, Clock, CircleDashed,
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select'
+import {
   Users, Stethoscope, ClipboardCheck, LogOut, UserCheck,
+  ChevronLeft, ChevronRight, Eye,
 } from 'lucide-react'
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
   PieChart, Pie, Cell,
 } from 'recharts'
-
-const STATUS_MAP: Record<string, { label: string; color: string }> = {
-  proposal_review: { label: '立项审核', color: 'bg-amber-100 text-amber-700' },
-  contract_signed: { label: '合同签署', color: 'bg-purple-100 text-purple-700' },
-  ethics_review: { label: '伦理审核', color: 'bg-green-100 text-green-700' },
-  study_started: { label: '研究启动', color: 'bg-cyan-100 text-cyan-700' },
-  study_closed: { label: '研究关闭', color: 'bg-gray-100 text-gray-700' },
-  suspended: { label: '已暂停', color: 'bg-red-100 text-red-700' },
-  pending: { label: '立项', color: 'bg-amber-100 text-amber-700' },
-  active: { label: '进行中', color: 'bg-teal-100 text-teal-700' },
-  completed: { label: '已结束', color: 'bg-blue-100 text-blue-700' },
-}
 
 const PATIENT_STATUS_LABELS: Record<string, string> = {
   screening: '筛选',
@@ -42,53 +36,37 @@ const PATIENT_STATUS_COLORS: Record<string, string> = {
   lost: '#94a3b8',
 }
 
-const SINGLE_FLOW_STEPS = [
-  { key: 'proposal', label: '立项管理' },
-  { key: 'ethics', label: '伦理审核' },
-  { key: 'contract', label: '合同审核' },
-  { key: 'startup', label: '中心启动' },
-  { key: 'record', label: '备案管理' },
-  { key: 'close', label: '结题管理' },
-  { key: 'center', label: '中心关闭' },
-]
-
-function getProjectStepState(project: any, idx: number) {
-  const statusOrder = ['proposal_review', 'ethics_review', 'contract_signed', 'study_started', 'study_closed']
-  const currentStepIndex = statusOrder.indexOf(project.status)
-  if (idx < currentStepIndex) return 'done'
-  if (idx === currentStepIndex) return 'active'
-  return 'pending'
-}
-
-function getProjectStepDate(project: any, idx: number) {
-  if (idx === 0) return project.createdAt?.slice(0, 10) || '-'
-  if (idx === 3) return project.startDate || '-'
-  if (idx === 6) return project.endDate || '-'
-  const statusOrder = ['proposal_review', 'ethics_review', 'contract_signed', 'study_started', 'study_closed']
-  const currentStepIndex = statusOrder.indexOf(project.status)
-  if (idx < currentStepIndex) {
-    const base = new Date(project.createdAt)
-    base.setMonth(base.getMonth() + idx)
-    return base.toISOString().slice(0, 10)
+/**
+ * 患者状态月度统计（基于真实患者数据，稳定不随机）：
+ * 按患者最近更新月份（updatedAt）归桶，统计当月处于各状态的患者数
+ */
+function generateMonthlyPatientData(projectPatients: any[]) {
+  const STATUS_KEYS: Record<string, string> = {
+    screening: '筛选', enrolled: '入组', treatment: '治疗期',
+    withdrawn: '退出研究', completed: '完成研究', lost: '失访',
   }
-  return '未到'
-}
-
-function generateMonthlyPatientData(_projectPatients: any[]) {
   const now = new Date()
+  const buckets: Record<string, Record<string, number>> = {}
+  for (const p of projectPatients) {
+    const label = STATUS_KEYS[p.status]
+    const key = (p.updatedAt || p.createdAt || '').slice(0, 7)
+    if (!label || !key) continue
+    buckets[key] = buckets[key] ?? {}
+    buckets[key][label] = (buckets[key][label] ?? 0) + 1
+  }
   const months: { month: string; 筛选: number; 入组: number; 治疗期: number; 退出研究: number; 完成研究: number; 失访: number }[] = []
   for (let i = 7; i >= 0; i--) {
     const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
-    const label = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
-    // 基于实际患者数据模拟
+    const m = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+    const b = buckets[m] ?? {}
     months.push({
-      month: label,
-      筛选: Math.floor(Math.random() * 10) + 2,
-      入组: Math.floor(Math.random() * 8) + 1,
-      治疗期: Math.floor(Math.random() * 6) + 1,
-      退出研究: Math.floor(Math.random() * 3),
-      完成研究: Math.floor(Math.random() * 4),
-      失访: Math.floor(Math.random() * 2),
+      month: m,
+      筛选: b['筛选'] ?? 0,
+      入组: b['入组'] ?? 0,
+      治疗期: b['治疗期'] ?? 0,
+      退出研究: b['退出研究'] ?? 0,
+      完成研究: b['完成研究'] ?? 0,
+      失访: b['失访'] ?? 0,
     })
   }
   return months
@@ -125,51 +103,178 @@ function generateAllProjectsBarData(projects: any[], patients: any[]) {
   return result
 }
 
-// ==================== 通用：患者列表表格 ====================
+// ==================== 通用：患者列表表格（与录入端一致：分页 + 可选行数 + 访视完成率 + 查看操作） ====================
+const PAGE_SIZE_OPTIONS = [10, 20, 50, 100]
+
 function PatientTable({ patients, projects }: { patients: any[]; projects: any[] }) {
+  const { visitData } = useAppStorage()
+  const [pageSize, setPageSize] = usePageSize('crf_pagesize_manager_patients')
+  const [page, setPage] = useState(1)
+
+  const totalPages = Math.max(1, Math.ceil(patients.length / pageSize))
+  const safePage = Math.min(page, totalPages)
+  const paged = useMemo(
+    () => patients.slice((safePage - 1) * pageSize, safePage * pageSize),
+    [patients, safePage, pageSize]
+  )
+
+  // 患者集合变化时回到第一页
+  useEffect(() => {
+    setPage(1)
+  }, [patients])
+
+  const centerNameOf = (p: any): string => {
+    const proj = projects.find((x) => x.id === p.projectId)
+    return proj?.centers?.find((c: any) => c.id === p.centerId)?.name || proj?.researchCenter || '-'
+  }
+
+  // 访视完成率：已完成访视 ÷ 应做访视（退出/失访患者按最后有数据的访视计应做数），与录入端口径一致
+  const rateMap = useMemo(() => {
+    const map = new Map<string, number>()
+    patients.forEach((p) => {
+      const project = projects.find((proj) => proj.id === p.projectId)
+      if (!project) { map.set(p.id, 0); return }
+      const isActive = p.status !== 'withdrawn' && p.status !== 'lost'
+      let expected = project.visits.length
+      if (!isActive) {
+        const ordersWithData = project.visits
+          .filter((v: any) => visitData.some((r: any) => r.patientId === p.id && r.visitId === v.id))
+          .map((v: any) => v.order)
+        expected = ordersWithData.length > 0 ? Math.max(...ordersWithData) : 0
+      }
+      if (expected === 0) { map.set(p.id, 0); return }
+      let completed = 0
+      project.visits.forEach((visit: any) => {
+        if (visit.order > expected) return
+        const records = visitData.filter((r: any) => r.patientId === p.id && r.visitId === visit.id)
+        const done = records.filter((r: any) => r.status === 'completed').length
+        if (visit.crfModuleIds.length > 0 && done >= visit.crfModuleIds.length) completed++
+      })
+      map.set(p.id, Math.round((completed / expected) * 100))
+    })
+    return map
+  }, [patients, projects, visitData])
+
+  // 列宽按比例分配，间距均匀（与录入端一致）
+  const GRID_COLS = 'grid-cols-[0.4fr_1.1fr_1.3fr_0.7fr_0.8fr_0.7fr_0.8fr_0.95fr_0.95fr_1.2fr_0.9fr]'
+  const HEADERS = ['序号', '研究编号', '研究中心', '姓名缩写', '状态', '筛选编号', '入组编号', '知情日期', '入组日期', '访视完成率', '操作']
+
+  // 状态口径：完成研究 / 进行中（退出、失访单独标识），与录入端一致
+  const statusViewOf = (status: string): { label: string; cls: string } => {
+    if (status === 'completed') return { label: '完成研究', cls: 'bg-purple-50 text-purple-600' }
+    if (status === 'withdrawn' || status === 'lost') return { label: '退出研究', cls: 'bg-red-50 text-red-500' }
+    return { label: '进行中', cls: 'bg-teal-50 text-teal-600' }
+  }
+
   return (
-    <Card className="bg-white">
+    <Card className="bg-white overflow-hidden py-0 gap-0">
       <CardContent className="p-0">
-        <div className="grid grid-cols-9 bg-sky-500 text-white text-xs font-medium">
-          {['课题编号', '患者编号', '姓名缩写', '状态', '性别', '知情日期', '入组日期', '当前访视', '下次访视'].map(
-            (h) => (
-              <div key={h} className="py-2.5 px-2 text-center border-r border-sky-400 last:border-r-0">
-                {h}
-              </div>
-            )
-          )}
+        {/* 表头 */}
+        <div className={`grid ${GRID_COLS} bg-slate-50 border-b border-slate-200`}>
+          {HEADERS.map((h) => (
+            <div key={h} className="py-2.5 px-3 text-center text-xs font-medium text-slate-500 whitespace-nowrap">
+              {h}
+            </div>
+          ))}
         </div>
+
+        {/* 表体 */}
         {patients.length === 0 && (
           <div className="text-center py-8 text-sm text-slate-400">暂无患者数据</div>
         )}
-        {patients.map((p) => {
+        {paged.map((p, idx) => {
           const project = projects.find((proj) => proj.id === p.projectId)
-          const statusLabel = PATIENT_STATUS_LABELS[p.status] || p.status
+          const statusView = statusViewOf(p.status)
+          const rate = rateMap.get(p.id) ?? 0
+          const seq = String((safePage - 1) * pageSize + idx + 1).padStart(2, '0')
           return (
-            <div key={p.id} className="grid grid-cols-9 text-xs text-slate-700 border-b border-slate-100 last:border-b-0">
-              <div className="py-3 px-2 text-center border-r border-slate-100">{project?.projectNo || '-'}</div>
-              <div className="py-3 px-2 text-center border-r border-slate-100">{p.screeningId || p.screeningNo || '-'}</div>
-              <div className="py-3 px-2 text-center border-r border-slate-100">{p.nameInitials || '-'}</div>
-              <div className="py-3 px-2 text-center border-r border-slate-100">
-                <span className={`inline-block px-2 py-0.5 rounded text-[10px] ${
-                  p.status === 'screening' ? 'bg-blue-50 text-blue-600' :
-                  p.status === 'enrolled' ? 'bg-orange-50 text-orange-600' :
-                  p.status === 'treatment' ? 'bg-teal-50 text-teal-600' :
-                  p.status === 'completed' ? 'bg-purple-50 text-purple-600' :
-                  p.status === 'withdrawn' ? 'bg-red-50 text-red-600' :
-                  'bg-slate-50 text-slate-600'
-                }`}>
-                  {statusLabel}
+            <div
+              key={p.id}
+              className={`grid ${GRID_COLS} text-xs text-slate-700 hover:bg-sky-50/40 transition-colors ${
+                idx !== paged.length - 1 ? 'border-b border-slate-100' : ''
+              }`}
+            >
+              <div className="py-3 px-3 text-center font-mono text-slate-600">{seq}</div>
+              <div className="py-3 px-3 text-center font-mono text-slate-500">{project?.projectNo || '-'}</div>
+              <div className="py-3 px-3 text-center truncate">{centerNameOf(p)}</div>
+              <div className="py-3 px-3 text-center font-medium text-slate-800">{p.nameInitials || '-'}</div>
+              <div className="py-3 px-3 text-center">
+                <span className={`inline-block px-2 py-0.5 rounded text-[10px] ${statusView.cls}`}>
+                  {statusView.label}
                 </span>
               </div>
-              <div className="py-3 px-2 text-center border-r border-slate-100">{p.gender === 'male' ? '男' : p.gender === 'female' ? '女' : '-'}</div>
-              <div className="py-3 px-2 text-center border-r border-slate-100">{p.consentDate || '-'}</div>
-              <div className="py-3 px-2 text-center border-r border-slate-100">{p.enrollmentDate || '-'}</div>
-              <div className="py-3 px-2 text-center border-r border-slate-100">{p.currentVisit || '-'}</div>
-              <div className="py-3 px-2 text-center">{p.nextVisit || '-'}</div>
+              <div className="py-3 px-3 text-center font-medium text-slate-800 font-mono">{p.screeningId || p.screeningNo || '-'}</div>
+              <div className="py-3 px-3 text-center font-mono text-slate-500">{p.randomizationId || '-'}</div>
+              <div className="py-3 px-3 text-center text-slate-500">{p.consentDate || '-'}</div>
+              <div className="py-3 px-3 text-center text-slate-500">{p.enrollmentDate || '-'}</div>
+              <div className="py-3 px-3">
+                <div className="flex items-center gap-2 justify-center">
+                  <div className="w-full max-w-[72px] h-1.5 rounded-full bg-slate-100 overflow-hidden">
+                    <div
+                      className={`h-full rounded-full ${rate >= 100 ? 'bg-emerald-500' : 'bg-gradient-to-r from-sky-400 to-sky-500'}`}
+                      style={{ width: `${rate}%` }}
+                    />
+                  </div>
+                  <span className={`font-semibold ${rate >= 100 ? 'text-emerald-600' : 'text-sky-600'}`}>{rate}%</span>
+                </div>
+              </div>
+              <div className="py-3 px-3 text-center">
+                <Button size="sm" variant="outline" className="h-6 px-2 text-[11px]" asChild>
+                  <Link to={`/manager/patient-print/${p.id}`}>
+                    <Eye className="w-3 h-3 mr-1" /> 查看数据
+                  </Link>
+                </Button>
+              </div>
             </div>
           )
         })}
+
+        {/* 分页栏 */}
+        {patients.length > 0 && (
+          <div className="flex items-center justify-between px-4 py-2.5 border-t border-slate-200 bg-slate-50/50">
+            <span className="text-xs text-slate-500">
+              共 {patients.length} 例 · 第 {(safePage - 1) * pageSize + 1}-{Math.min(safePage * pageSize, patients.length)} 例
+            </span>
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs text-slate-400">每页</span>
+                <Select
+                  value={String(pageSize)}
+                  onValueChange={(v) => { setPageSize(Number(v)); setPage(1) }}
+                >
+                  <SelectTrigger className="h-7 w-[64px] text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {PAGE_SIZE_OPTIONS.map((n) => (
+                      <SelectItem key={n} value={String(n)} className="text-xs">{n}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <span className="text-xs text-slate-400">行</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <Button
+                  variant="outline" size="sm" className="h-7 w-7 p-0"
+                  disabled={safePage <= 1}
+                  onClick={() => setPage(safePage - 1)}
+                >
+                  <ChevronLeft className="w-3.5 h-3.5" />
+                </Button>
+                <span className="text-xs text-slate-600 min-w-[52px] text-center">
+                  {safePage} / {totalPages}
+                </span>
+                <Button
+                  variant="outline" size="sm" className="h-7 w-7 p-0"
+                  disabled={safePage >= totalPages}
+                  onClick={() => setPage(safePage + 1)}
+                >
+                  <ChevronRight className="w-3.5 h-3.5" />
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
       </CardContent>
     </Card>
   )
@@ -186,132 +291,61 @@ function PatientPieChart({ patients }: { patients: any[] }) {
     { name: '失访', value: patients.filter((p) => p.status === 'lost').length, color: PATIENT_STATUS_COLORS.lost },
   ].filter((d) => d.value > 0)
 
+  const total = data.reduce((s, d) => s + d.value, 0)
+
   return (
-    <ResponsiveContainer width="100%" height={240}>
-      <PieChart>
-        <Pie
-          data={data}
-          cx="50%"
-          cy="50%"
-          innerRadius={50}
-          outerRadius={90}
-          paddingAngle={3}
-          dataKey="value"
-        >
-          {data.map((entry, index) => (
-            <Cell key={`cell-${index}`} fill={entry.color} />
-          ))}
-        </Pie>
-        <Tooltip />
-        <Legend wrapperStyle={{ fontSize: 11 }} />
-      </PieChart>
-    </ResponsiveContainer>
+    <div className="flex items-center justify-center gap-20">
+      <div className="w-[280px] shrink-0">
+        <h3 className="text-sm font-medium text-slate-700 mb-1 text-center">患者总览</h3>
+        <div className="relative">
+          <ResponsiveContainer width="100%" height={220}>
+            <PieChart>
+              <Pie
+                data={data}
+                cx="50%"
+                cy="50%"
+                innerRadius={48}
+                outerRadius={86}
+                paddingAngle={3}
+                dataKey="value"
+              >
+                {data.map((entry, index) => (
+                  <Cell key={`cell-${index}`} fill={entry.color} />
+                ))}
+              </Pie>
+              <Tooltip />
+            </PieChart>
+          </ResponsiveContainer>
+          <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+            <span className="text-xl font-bold text-slate-800">{total}</span>
+            <span className="text-[11px] text-slate-400">总例数</span>
+          </div>
+        </div>
+      </div>
+      <div className="w-28 shrink-0 space-y-2">
+        {data.map((d) => (
+          <div key={d.name} className="flex items-center gap-2">
+            <span className="w-2.5 h-2.5 rounded-sm shrink-0" style={{ backgroundColor: d.color }} />
+            <span className="text-xs text-slate-600 flex-1">{d.name}</span>
+            <span className="text-xs font-semibold text-slate-800 tabular-nums">{d.value}</span>
+          </div>
+        ))}
+      </div>
+    </div>
   )
 }
 
 // ==================== 单个项目视图 ====================
 function SingleProjectView({ project, allPatients, allProjects }: { project: any; allPatients: any[]; allProjects: any[] }) {
   const projectPatients = allPatients.filter((p) => p.projectId === project.id)
-  const statusInfo = STATUS_MAP[project.status] || STATUS_MAP.proposal_review
   const monthlyData = generateMonthlyPatientData(projectPatients)
 
   return (
     <div className="space-y-4">
-      {/* 顶部项目信息卡片 */}
-      <Card className="bg-white">
-        <CardContent className="p-4">
-          <div className="flex items-start justify-between mb-3">
-            <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-lg bg-teal-50 flex items-center justify-center">
-                <FlaskConical className="w-4 h-4 text-teal-600" />
-              </div>
-              <div>
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-slate-400 font-mono">{project.projectNo}</span>
-                  <Badge className={`text-xs ${statusInfo.color}`}>{statusInfo.label}</Badge>
-                </div>
-                <h2 className="font-semibold text-slate-800 text-sm">{project.name}</h2>
-              </div>
-            </div>
-          </div>
-          <div className="grid grid-cols-4 gap-3 text-sm">
-            <div className="text-center">
-              <p className="text-xs text-slate-400">主要研究者</p>
-              <p className="font-medium text-slate-700 text-sm">{project.principalInvestigator || '-'}</p>
-            </div>
-            <div className="text-center">
-              <p className="text-xs text-slate-400">研究科室</p>
-              <p className="font-medium text-slate-700 text-sm">{project.department || '-'}</p>
-            </div>
-            <div className="text-center">
-              <p className="text-xs text-slate-400">申办方</p>
-              <p className="font-medium text-slate-700 text-sm">{project.sponsor || '-'}</p>
-            </div>
-            <div className="text-center">
-              <p className="text-xs text-slate-400">临床监查员</p>
-              <p className="font-medium text-slate-700 text-sm">-</p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* 流程时间线 - 7步 */}
-      <Card className="bg-white">
-        <CardContent className="p-4">
-          <div className="flex items-center justify-between">
-            {SINGLE_FLOW_STEPS.map((step, idx) => {
-              const state = getProjectStepState(project, idx)
-              const date = getProjectStepDate(project, idx)
-              const isLast = idx === SINGLE_FLOW_STEPS.length - 1
-
-              return (
-                <div key={step.key} className="flex items-center flex-1">
-                  <div className="flex flex-col items-center flex-1">
-                    <div
-                      className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold mb-1.5 ${
-                        state === 'done'
-                          ? 'bg-sky-500 text-white'
-                          : state === 'active'
-                          ? 'bg-sky-100 text-sky-600 border-2 border-sky-500'
-                          : 'bg-slate-100 text-slate-400'
-                      }`}
-                    >
-                      {state === 'done' ? (
-                        <CheckCircle2 className="w-4 h-4" />
-                      ) : state === 'active' ? (
-                        <Clock className="w-4 h-4" />
-                      ) : (
-                        <CircleDashed className="w-4 h-4" />
-                      )}
-                    </div>
-                    <span
-                      className={`text-xs font-medium ${
-                        state === 'done' || state === 'active' ? 'text-slate-700' : 'text-slate-400'
-                      }`}
-                    >
-                      {step.label}
-                    </span>
-                    <span className="text-[10px] text-slate-400 mt-0.5">{date}</span>
-                  </div>
-                  {!isLast && (
-                    <div
-                      className={`flex-1 h-0.5 mx-1 ${
-                        state === 'done' ? 'bg-sky-500' : 'bg-slate-200'
-                      }`}
-                    />
-                  )}
-                </div>
-              )
-            })}
-          </div>
-        </CardContent>
-      </Card>
-
       {/* 图表区域：饼图 + 柱状图 */}
       <div className="grid grid-cols-2 gap-4">
         <Card className="bg-white">
           <CardContent className="p-4">
-            <h3 className="text-sm font-medium text-slate-700 mb-2 text-center">患者总览</h3>
             <PatientPieChart patients={projectPatients} />
           </CardContent>
         </Card>
@@ -353,73 +387,25 @@ function AllProjectsView({ projects, patients }: { projects: any[]; patients: an
   const totalTreatment = patients.filter((p) => p.status === 'treatment').length
   const totalCompleted = patients.filter((p) => p.status === 'completed').length
   const totalWithdrawn = patients.filter((p) => p.status === 'withdrawn').length
+  // 副信息：入组目标合计 / 退出率
+  const targetSum = projects.reduce((sum: number, p: any) => sum + (p.targetEnrollment || 0), 0)
+  const withdrawRate = patients.length > 0 ? Math.round((totalWithdrawn / patients.length) * 100) : 0
 
   return (
     <div className="space-y-4">
-      {/* 顶部5个统计卡片 */}
+      {/* 顶部5个统计卡片（全站统一 StatCard） */}
       <div className="grid grid-cols-5 gap-4">
-        <Card>
-          <CardContent className="p-4 flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-blue-50 flex items-center justify-center">
-              <Users className="w-5 h-5 text-blue-600" />
-            </div>
-            <div>
-              <div className="text-sm text-slate-500">累计筛选</div>
-              <div className="text-xl font-bold text-slate-800">{totalScreening}个</div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4 flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-orange-50 flex items-center justify-center">
-              <UserCheck className="w-5 h-5 text-orange-600" />
-            </div>
-            <div>
-              <div className="text-sm text-slate-500">累计入组</div>
-              <div className="text-xl font-bold text-slate-800">{totalEnrolled}个</div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4 flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-teal-50 flex items-center justify-center">
-              <Stethoscope className="w-5 h-5 text-teal-600" />
-            </div>
-            <div>
-              <div className="text-sm text-slate-500">治疗期</div>
-              <div className="text-xl font-bold text-slate-800">{totalTreatment}个</div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4 flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-purple-50 flex items-center justify-center">
-              <ClipboardCheck className="w-5 h-5 text-purple-600" />
-            </div>
-            <div>
-              <div className="text-sm text-slate-500">完成研究</div>
-              <div className="text-xl font-bold text-slate-800">{totalCompleted}个</div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4 flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-red-50 flex items-center justify-center">
-              <LogOut className="w-5 h-5 text-red-600" />
-            </div>
-            <div>
-              <div className="text-sm text-slate-500">退出研究</div>
-              <div className="text-xl font-bold text-slate-800">{totalWithdrawn}个</div>
-            </div>
-          </CardContent>
-        </Card>
+        <StatCard label="累计筛选" value={totalScreening} unit="例" sub="当前处于筛选期" icon={Users} gradient="from-blue-500 to-blue-600" />
+        <StatCard label="累计入组" value={totalEnrolled} unit="例" sub={`目标 ${targetSum} 例`} icon={UserCheck} gradient="from-orange-500 to-amber-600" />
+        <StatCard label="治疗期" value={totalTreatment} unit="例" sub="正在接受研究治疗" icon={Stethoscope} gradient="from-teal-500 to-emerald-600" />
+        <StatCard label="完成研究" value={totalCompleted} unit="例" sub="已完成全部访视" icon={ClipboardCheck} gradient="from-purple-500 to-violet-600" />
+        <StatCard label="退出研究" value={totalWithdrawn} unit="例" sub={`退出率 ${withdrawRate}%`} icon={LogOut} gradient="from-red-500 to-rose-600" />
       </div>
 
       {/* 图表区域：饼图 + 柱状图 */}
       <div className="grid grid-cols-2 gap-4">
         <Card className="bg-white">
           <CardContent className="p-4">
-            <h3 className="text-sm font-medium text-slate-700 mb-2 text-center">患者总览</h3>
             <PatientPieChart patients={patients} />
           </CardContent>
         </Card>

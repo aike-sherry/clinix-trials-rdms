@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Link, useSearchParams } from 'react-router'
 import { useAppStorage } from '@/hooks/useAppStorage'
+import StatCard from '@/components/StatCard'
 import type { Project } from '@/types'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -8,14 +9,39 @@ import { Label } from '@/components/ui/label'
 import { Card, CardContent } from '@/components/ui/card'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Badge } from '@/components/ui/badge'
-import { Search, Plus, FileText, FlaskConical, Users, Database, BarChart3, Trash2 } from 'lucide-react'
+import {
+  Search, Plus, FileText, FlaskConical, Package, UserCircle,
+  Trash2, LayoutGrid, ClipboardCheck, FileSignature, ShieldCheck,
+  Rocket, Archive, LayoutList
+} from 'lucide-react'
 
-const STATUS_MAP: Record<string, { label: string; color: string }> = {
-  pending: { label: '立项', color: 'bg-amber-50 text-amber-600 border-amber-200' },
-  active: { label: '进行中', color: 'bg-teal-50 text-teal-600 border-teal-200' },
-  completed: { label: '已完成', color: 'bg-blue-50 text-blue-600 border-blue-200' },
-  suspended: { label: '已暂停', color: 'bg-red-50 text-red-600 border-red-200' },
+const STATUS_MAP: Record<string, { label: string; color: string; textColor: string; bgColor: string }> = {
+  proposal_review: { label: '立项审核', color: 'border-amber-200', textColor: 'text-amber-600', bgColor: 'bg-amber-50' },
+  pending: { label: '立项审核', color: 'border-amber-200', textColor: 'text-amber-600', bgColor: 'bg-amber-50' },
+  contract_signed: { label: '合同签署', color: 'border-purple-200', textColor: 'text-purple-600', bgColor: 'bg-purple-50' },
+  ethics_review: { label: '伦理审核', color: 'border-green-200', textColor: 'text-green-600', bgColor: 'bg-green-50' },
+  study_started: { label: '研究启动', color: 'border-cyan-200', textColor: 'text-cyan-600', bgColor: 'bg-cyan-50' },
+  active: { label: '研究启动', color: 'border-cyan-200', textColor: 'text-cyan-600', bgColor: 'bg-cyan-50' },
+  study_closed: { label: '研究关闭', color: 'border-gray-200', textColor: 'text-gray-600', bgColor: 'bg-gray-50' },
+  completed: { label: '研究关闭', color: 'border-gray-200', textColor: 'text-gray-600', bgColor: 'bg-gray-50' },
+  suspended: { label: '已暂停', color: 'border-red-200', textColor: 'text-red-600', bgColor: 'bg-red-50' },
 }
+
+const STAGE_OPTIONS = [
+  { value: 'proposal_review', label: '立项审核' },
+  { value: 'contract_signed', label: '合同签署' },
+  { value: 'ethics_review', label: '伦理审核' },
+  { value: 'study_started', label: '研究启动' },
+  { value: 'study_closed', label: '研究关闭' },
+  { value: 'suspended', label: '已暂停' },
+]
+
+const TAB_ITEMS = [
+  { path: 'overview', label: '项目概况', icon: FileText },
+  { path: 'modules', label: '模块管理', icon: Package },
+  { path: 'crf', label: 'CRF配置', icon: FlaskConical },
+  { path: 'account', label: '账号管理', icon: UserCircle },
+]
 
 function genId() {
   return Math.random().toString(36).slice(2) + Date.now().toString(36)
@@ -23,11 +49,13 @@ function genId() {
 
 export default function ProjectList() {
   const { projects, patients, saveProject, deleteProject } = useAppStorage()
-  const [searchParams] = useSearchParams()
+  const [searchParams, setSearchParams] = useSearchParams()
+
   const [search, setSearch] = useState('')
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid')
   const [showCreate, setShowCreate] = useState(false)
   const [newProject, setNewProject] = useState<Partial<Project>>({
-    status: 'pending',
+    status: 'proposal_review',
   })
 
   useEffect(() => {
@@ -38,10 +66,25 @@ export default function ProjectList() {
 
   const filtered = projects.filter(
     (p) =>
+      !search ||
       p.name.includes(search) ||
       p.projectNo.includes(search) ||
       p.principalInvestigator.includes(search)
   )
+
+  // 顶部统计数据
+  const totalCount = projects.length
+  const proposalCount = projects.filter(
+    (p) => p.status === 'proposal_review' || p.status === 'pending'
+  ).length
+  const contractCount = projects.filter((p) => p.status === 'contract_signed').length
+  const ethicsCount = projects.filter((p) => p.status === 'ethics_review').length
+  const startedCount = projects.filter(
+    (p) => p.status === 'study_started' || p.status === 'active'
+  ).length
+  const closedCount = projects.filter(
+    (p) => p.status === 'study_closed' || p.status === 'completed'
+  ).length
 
   const handleCreate = () => {
     if (!newProject.name || !newProject.projectNo) return
@@ -53,7 +96,7 @@ export default function ProjectList() {
       principalInvestigator: newProject.principalInvestigator || '',
       researchCenter: newProject.researchCenter || '',
       department: newProject.department || '',
-      status: (newProject.status as Project['status']) || 'pending',
+      status: (newProject.status as Project['status']) || 'proposal_review',
       startDate: newProject.startDate,
       endDate: newProject.endDate,
       targetEnrollment: newProject.targetEnrollment || 100,
@@ -66,130 +109,175 @@ export default function ProjectList() {
     }
     saveProject(project)
     setShowCreate(false)
-    setNewProject({ status: 'pending' })
+    setNewProject({ status: 'proposal_review' })
+    const newParams = new URLSearchParams(searchParams)
+    newParams.delete('create')
+    setSearchParams(newParams)
   }
 
   return (
     <div className="space-y-5">
-      {/* 标题栏 */}
-      <div className="flex items-center justify-between">
-        <h1 className="text-xl font-bold text-slate-800">项目管理</h1>
+      {/* 操作栏 */}
+      <div className="flex items-center justify-end">
         <div className="flex items-center gap-3">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
             <Input
               placeholder="搜索项目编号/名称/研究者"
-              className="pl-9 w-72"
+              className="pl-9 w-72 bg-white"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
           </div>
-          <Button className="bg-teal-500 hover:bg-teal-600" onClick={() => setShowCreate(true)}>
+          <Button className="bg-sky-500 hover:bg-sky-600 text-white" onClick={() => setShowCreate(true)}>
             <Plus className="w-4 h-4 mr-1" /> 创建项目
           </Button>
         </div>
       </div>
 
+      {/* 顶部统计卡片（全站统一 StatCard） */}
+      <div className="grid grid-cols-6 gap-4">
+        <StatCard label="研究总数" value={totalCount} unit="项" sub={`启动 ${startedCount} 项`} icon={LayoutGrid} gradient="from-blue-500 to-blue-600" />
+        <StatCard label="立项审核" value={proposalCount} unit="项" sub="待立项审批" icon={ClipboardCheck} gradient="from-amber-500 to-orange-500" />
+        <StatCard label="合同签署" value={contractCount} unit="项" sub="合同已签署" icon={FileSignature} gradient="from-purple-500 to-violet-600" />
+        <StatCard label="伦理审核" value={ethicsCount} unit="项" sub="伦理审查中" icon={ShieldCheck} gradient="from-emerald-500 to-green-600" />
+        <StatCard label="研究启动" value={startedCount} unit="项" sub="正在入组实施" icon={Rocket} gradient="from-cyan-500 to-sky-600" />
+        <StatCard label="研究关闭" value={closedCount} unit="项" sub="已完成关闭" icon={Archive} gradient="from-slate-500 to-slate-600" />
+      </div>
+
       {/* 项目列表 */}
       {filtered.length === 0 ? (
         <div className="text-center py-16 bg-white rounded-lg border border-dashed border-slate-300">
-          <FileText className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+          <FlaskConical className="w-12 h-12 text-slate-300 mx-auto mb-3" />
           <p className="text-slate-500">暂无项目，点击上方按钮创建</p>
         </div>
       ) : (
         <div className="space-y-4">
-          {filtered.map((project) => {
-            const projectPatients = patients.filter((p) => p.projectId === project.id)
-            const screened = projectPatients.length
-            const enrolled = projectPatients.filter((p) => p.status !== 'screening').length
-            const statusInfo = STATUS_MAP[project.status] || STATUS_MAP.pending
+          <div className="flex items-center justify-between">
+            <p className="text-sm text-slate-400">共 {filtered.length} 个项目</p>
+            {/* 视图切换 */}
+            <div className="flex items-center border rounded-md overflow-hidden bg-white">
+              <Button
+                variant="ghost"
+                size="icon"
+                className={`h-8 w-8 rounded-none ${viewMode === 'grid' ? 'bg-blue-50 text-blue-600' : 'text-slate-400'}`}
+                onClick={() => setViewMode('grid')}
+              >
+                <LayoutGrid className="w-4 h-4" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className={`h-8 w-8 rounded-none ${viewMode === 'list' ? 'bg-blue-50 text-blue-600' : 'text-slate-400'}`}
+                onClick={() => setViewMode('list')}
+              >
+                <LayoutList className="w-4 h-4" />
+              </Button>
+            </div>
+          </div>
+          <div className={viewMode === 'grid' ? 'grid grid-cols-2 gap-4' : 'space-y-4'}>
+            {filtered.map((project) => {
+              const projectPatients = patients.filter((p) => p.projectId === project.id)
+              const enrolled = projectPatients.filter((p) => p.status !== 'screening').length
+              const target = project.targetEnrollment || 100
+              const progressPct = target > 0 ? Math.round((enrolled / target) * 100) : 0
+              const statusInfo = STATUS_MAP[project.status] || STATUS_MAP.proposal_review
 
-            return (
-              <Card key={project.id} className="hover:shadow-md transition-shadow">
-                <CardContent className="p-5">
-                  {/* 项目头部 */}
-                  <div className="flex items-start justify-between mb-4">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-lg bg-teal-50 flex items-center justify-center">
-                        <FlaskConical className="w-5 h-5 text-teal-600" />
+              return (
+                <Card key={project.id} className="hover:shadow-md transition-shadow bg-white">
+                  <CardContent className="p-5">
+                    {/* 项目头部 */}
+                    <div className="flex items-start justify-between mb-4">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="w-10 h-10 rounded-lg bg-teal-50 flex items-center justify-center flex-shrink-0">
+                          <FlaskConical className="w-5 h-5 text-teal-600" />
+                        </div>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs text-slate-400 font-mono">{project.projectNo}</span>
+                          </div>
+                          <h3 className="font-semibold text-slate-800 truncate text-sm">{project.name}</h3>
+                        </div>
                       </div>
-                      <div>
-                        <h3 className="font-semibold text-slate-800">{project.name}</h3>
-                        <p className="text-xs text-slate-400">{project.projectNo}</p>
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        <Badge variant="outline" className={`${statusInfo.bgColor} ${statusInfo.textColor} ${statusInfo.color} text-xs`}>
+                          {statusInfo.label}
+                        </Badge>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="w-7 h-7 text-slate-300 hover:text-red-500"
+                          onClick={() => deleteProject(project.id)}
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </Button>
                       </div>
                     </div>
-                    <Badge variant="outline" className={statusInfo.color}>
-                      {statusInfo.label}
-                    </Badge>
-                  </div>
 
-                  {/* 统计信息 */}
-                  <div className="grid grid-cols-4 gap-4 mb-4 text-sm">
-                    <div>
-                      <span className="text-slate-400">主要研究者</span>
-                      <p className="font-medium text-slate-700">{project.principalInvestigator || '-'}</p>
+                    {/* 统计信息 */}
+                    <div className="grid grid-cols-4 gap-3 mb-4 text-sm">
+                      <div className="text-center">
+                        <p className="text-xs text-slate-400">主要研究者</p>
+                        <p className="font-medium text-slate-700 truncate">{project.principalInvestigator || '-'}</p>
+                      </div>
+                      <div className="text-center">
+                        <p className="text-xs text-slate-400">研究科室</p>
+                        <p className="font-medium text-slate-700 truncate">{project.department || '-'}</p>
+                      </div>
+                      <div className="text-center">
+                        <p className="text-xs text-slate-400">申办方</p>
+                        <p className="font-medium text-slate-700 truncate">{project.sponsor || '-'}</p>
+                      </div>
+                      <div className="text-center">
+                        <p className="text-xs text-slate-400">临床监查员</p>
+                        <p className="font-medium text-slate-700 truncate">{'-'}</p>
+                      </div>
                     </div>
-                    <div>
-                      <span className="text-slate-400">研究中心</span>
-                      <p className="font-medium text-slate-700">{project.researchCenter || '-'}</p>
-                    </div>
-                    <div>
-                      <span className="text-slate-400">筛选例数</span>
-                      <p className="font-medium text-slate-700">{screened}</p>
-                    </div>
-                    <div>
-                      <span className="text-slate-400">入组例数</span>
-                      <p className="font-medium text-slate-700">{enrolled}</p>
-                    </div>
-                  </div>
 
-                  {/* 子导航 */}
-                  <div className="flex items-center gap-1 pt-3 border-t border-slate-100">
-                    <Button variant="ghost" size="sm" asChild className="text-slate-500 hover:text-teal-600">
-                      <Link to={`/projects/${project.id}/overview`}>
-                        <FileText className="w-3.5 h-3.5 mr-1" /> 项目概况
-                      </Link>
-                    </Button>
-                    <Button variant="ghost" size="sm" asChild className="text-slate-500 hover:text-teal-600">
-                      <Link to={`/projects/${project.id}/crf`}>
-                        <FlaskConical className="w-3.5 h-3.5 mr-1" /> CRF配制
-                      </Link>
-                    </Button>
-                    <Button variant="ghost" size="sm" asChild className="text-slate-500 hover:text-teal-600">
-                      <Link to={`/projects/${project.id}/patients`}>
-                        <Users className="w-3.5 h-3.5 mr-1" /> 患者管理
-                      </Link>
-                    </Button>
-                    <Button variant="ghost" size="sm" asChild className="text-slate-500 hover:text-teal-600">
-                      <Link to={`/projects/${project.id}/data`}>
-                        <Database className="w-3.5 h-3.5 mr-1" /> 数据管理
-                      </Link>
-                    </Button>
-                    <Button variant="ghost" size="sm" asChild className="text-slate-500 hover:text-teal-600">
-                      <Link to={`/projects/${project.id}/stats`}>
-                        <BarChart3 className="w-3.5 h-3.5 mr-1" /> 统计分析
-                      </Link>
-                    </Button>
-                    <div className="flex-1" />
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="text-red-400 hover:text-red-600"
-                      onClick={() => deleteProject(project.id)}
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            )
-          })}
+                    {/* 入组进度 */}
+                    <div className="mb-4">
+                      <div className="flex items-center justify-between text-sm mb-1.5">
+                        <span className="text-slate-500">入组进度 <span className="font-medium text-slate-700">{enrolled}/{target} 例</span></span>
+                        <span className="text-blue-500 font-medium">{progressPct}%</span>
+                      </div>
+                      <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-blue-400 rounded-full transition-all"
+                          style={{ width: `${progressPct}%` }}
+                        />
+                      </div>
+                    </div>
+
+                    {/* 子导航 - 横向排列 */}
+                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 pt-3 border-t border-slate-100">
+                      {TAB_ITEMS.map((tab) => {
+                        const Icon = tab.icon
+                        return (
+                          <Button
+                            key={tab.path}
+                            variant="ghost"
+                            size="sm"
+                            asChild
+                            className="text-slate-500 hover:text-teal-600 h-7 px-1 text-xs"
+                          >
+                            <Link to={`/admin/projects/${project.id}/${tab.path}`}>
+                              <Icon className="w-3.5 h-3.5 mr-1" /> {tab.label}
+                            </Link>
+                          </Button>
+                        )
+                      })}
+                    </div>
+                  </CardContent>
+                </Card>
+              )
+            })}
+          </div>
         </div>
       )}
 
       {/* 创建项目弹窗 */}
       <Dialog open={showCreate} onOpenChange={setShowCreate}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>创建新项目</DialogTitle>
           </DialogHeader>
@@ -198,7 +286,7 @@ export default function ProjectList() {
               <div>
                 <Label className="text-sm">项目编号 <span className="text-red-500">*</span></Label>
                 <Input
-                  placeholder="如：ON101CLCT01"
+                  placeholder="如：CN101CLCT01"
                   value={newProject.projectNo || ''}
                   onChange={(e) => setNewProject({ ...newProject, projectNo: e.target.value })}
                 />
@@ -240,12 +328,37 @@ export default function ProjectList() {
                 />
               </div>
               <div>
+                <Label className="text-sm">研究阶段</Label>
+                <select
+                  className="w-full h-9 px-3 rounded-md border border-input bg-background text-sm"
+                  value={newProject.status || 'proposal_review'}
+                  onChange={(e) => setNewProject({ ...newProject, status: e.target.value as Project['status'] })}
+                >
+                  {STAGE_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
                 <Label className="text-sm">目标入组数</Label>
                 <Input
-                  type="number"
+                  inputMode="numeric"
                   placeholder="100"
                   value={newProject.targetEnrollment || ''}
-                  onChange={(e) => setNewProject({ ...newProject, targetEnrollment: Number(e.target.value) })}
+                  onChange={(e) => {
+                    const v = e.target.value.replace(/\D/g, '')
+                    setNewProject({ ...newProject, targetEnrollment: v ? Number(v) : undefined })
+                  }}
+                />
+              </div>
+              <div>
+                <Label className="text-sm">申办方</Label>
+                <Input
+                  placeholder="如：海和药物"
+                  value={newProject.sponsor || ''}
+                  onChange={(e) => setNewProject({ ...newProject, sponsor: e.target.value })}
                 />
               </div>
             </div>
@@ -279,7 +392,7 @@ export default function ProjectList() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowCreate(false)}>取消</Button>
             <Button
-              className="bg-teal-500 hover:bg-teal-600"
+              className="bg-sky-500 hover:bg-sky-600"
               onClick={handleCreate}
               disabled={!newProject.name || !newProject.projectNo}
             >
