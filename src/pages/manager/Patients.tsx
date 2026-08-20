@@ -395,8 +395,8 @@ function AllProjectsView({ projects, patients }: { projects: any[]; patients: an
     <div className="space-y-4">
       {/* 顶部5个统计卡片（全站统一 StatCard） */}
       <div className="grid grid-cols-5 gap-4">
-        <StatCard label="累计筛选" value={totalScreening} unit="例" sub="当前处于筛选期" icon={Users} gradient="from-blue-500 to-blue-600" />
-        <StatCard label="累计入组" value={totalEnrolled} unit="例" sub={`目标 ${targetSum} 例`} icon={UserCheck} gradient="from-orange-500 to-amber-600" />
+        <StatCard label="筛选中" value={totalScreening} unit="例" sub="当前处于筛选期" icon={Users} gradient="from-blue-500 to-blue-600" />
+        <StatCard label="已入组" value={totalEnrolled} unit="例" sub={`目标 ${targetSum} 例`} icon={UserCheck} gradient="from-orange-500 to-amber-600" />
         <StatCard label="治疗期" value={totalTreatment} unit="例" sub="正在接受研究治疗" icon={Stethoscope} gradient="from-teal-500 to-emerald-600" />
         <StatCard label="完成研究" value={totalCompleted} unit="例" sub="已完成全部访视" icon={ClipboardCheck} gradient="from-purple-500 to-violet-600" />
         <StatCard label="退出研究" value={totalWithdrawn} unit="例" sub={`退出率 ${withdrawRate}%`} icon={LogOut} gradient="from-red-500 to-rose-600" />

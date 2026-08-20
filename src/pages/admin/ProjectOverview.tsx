@@ -19,8 +19,8 @@ export default function ProjectOverview() {
       <div className="grid grid-cols-4 gap-4">
         <StatCard label="筛选例数" value={projectPatients.length} unit="例" sub="本项目全部受试者" icon={ClipboardList} gradient="from-blue-500 to-blue-600" />
         <StatCard
-          label="入组例数" value={projectPatients.filter((p) => p.status !== 'screening').length} unit="例"
-          sub={`入组率 ${projectPatients.length > 0 ? Math.round((projectPatients.filter((p) => p.status !== 'screening').length / projectPatients.length) * 100) : 0}%`}
+          label="入组例数" value={projectPatients.filter((p) => p.status === 'enrolled' || p.status === 'treatment' || p.status === 'completed').length} unit="例"
+          sub={`入组率 ${projectPatients.length > 0 ? Math.round((projectPatients.filter((p) => p.status === 'enrolled' || p.status === 'treatment' || p.status === 'completed').length / projectPatients.length) * 100) : 0}%`}
           icon={UserCheck} gradient="from-teal-500 to-emerald-600"
         />
         <StatCard label="访视数" value={project.visits.length} unit="次" sub="访视计划配置" icon={CalendarCheck} gradient="from-violet-500 to-purple-600" />

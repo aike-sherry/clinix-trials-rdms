@@ -325,7 +325,8 @@ function AllProjectsView({ projects, patients }: { projects: any[]; patients: an
   // 统计
   const totalProjects = projects.length
   const uniqueCenters = new Set(projects.map((p) => p.researchCenter).filter(Boolean)).size
-  const totalScreening = patients.filter((p) => p.status === 'screening').length
+  // 口径与首页一致：累计筛选 = 全部登记受试者；累计入组 = 已入组+治疗期+完成研究
+  const totalScreening = patients.length
   const totalEnrolled = patients.filter(
     (p) => p.status === 'enrolled' || p.status === 'treatment' || p.status === 'completed'
   ).length
@@ -350,7 +351,7 @@ function AllProjectsView({ projects, patients }: { projects: any[]; patients: an
         <StatCard label="累计筛选" value={totalScreening} unit="例" sub="全部受试者" icon={Users} gradient="from-blue-500 to-indigo-600" />
         <StatCard
           label="累计入组" value={totalEnrolled} unit="例"
-          sub={`入组率 ${(totalScreening + totalEnrolled) > 0 ? Math.round((totalEnrolled / (totalScreening + totalEnrolled)) * 100) : 0}%`}
+          sub={`入组率 ${totalScreening > 0 ? Math.round((totalEnrolled / totalScreening) * 100) : 0}%`}
           icon={UserCheck} gradient="from-orange-500 to-amber-600"
         />
       </div>
