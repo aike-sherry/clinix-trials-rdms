@@ -231,7 +231,7 @@ export default function LoginPage() {
                 {/* ==================== 统一登录表单 ==================== */}
                 <div className="mb-6 text-center">
                   <img src={logoCliniX} alt="CLINI X TRIALS" className="h-10 w-auto mx-auto mb-4 drop-shadow-sm" />
-                  <h2 className="text-2xl font-bold text-slate-800 tracking-wide">欢迎登录</h2>
+                  <h2 className="text-2xl font-bold text-slate-800 tracking-wide">欢迎回来</h2>
                   <p className="text-xs text-slate-400 mt-1.5 tracking-[0.12em]">Research Data Management System</p>
                 </div>
                 <div className="space-y-4">
