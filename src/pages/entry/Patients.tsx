@@ -17,15 +17,6 @@ import {
   PieChart, Pie, Cell,
 } from 'recharts'
 
-const PATIENT_STATUS_LABELS: Record<string, string> = {
-  screening: '筛选',
-  enrolled: '入组',
-  treatment: '治疗期',
-  completed: '完成研究',
-  withdrawn: '退出研究',
-  lost: '失访',
-}
-
 const PATIENT_STATUS_COLORS: Record<string, string> = {
   screening: '#3b82f6',
   enrolled: '#f97316',

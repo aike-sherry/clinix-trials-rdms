@@ -3,10 +3,9 @@ import { useNavigate, useSearchParams } from 'react-router'
 import { useAppStorage } from '@/hooks/useAppStorage'
 import StatCard from '@/components/StatCard'
 import { Card, CardContent } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
-  FlaskConical, CheckCircle2, Clock, CircleDashed,
+  CheckCircle2, Clock, CircleDashed,
   Building2, Users, ClipboardList, UserCheck,
   BarChart3, Table as TableIcon, TrendingUp,
 } from 'lucide-react'

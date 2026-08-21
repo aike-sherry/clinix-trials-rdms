@@ -61,17 +61,13 @@ export default function ProjectMatrix({
   onlyWithData?: boolean
   onLocatorsChange?: (next: { visitId?: string; moduleId?: string; onlyWithData?: boolean }) => void
 }) {
-  const [innerVisitId, setInnerVisitId] = useState('all')
-  const [innerModuleId, setInnerModuleId] = useState('all')
-  const [innerOnlyWithData, setInnerOnlyWithData] = useState(false)
+  const [innerVisitId] = useState('all')
+  const [innerModuleId] = useState('all')
+  const [innerOnlyWithData] = useState(false)
   const controlled = !!onLocatorsChange
   const visitId = controlled ? (visitIdProp ?? 'all') : innerVisitId
   const moduleId = controlled ? (moduleIdProp ?? 'all') : innerModuleId
   const onlyWithData = controlled ? (onlyWithDataProp ?? false) : innerOnlyWithData
-  const setVisitId = (v: string) => (onLocatorsChange ? onLocatorsChange({ visitId: v }) : setInnerVisitId(v))
-  const setModuleId = (v: string) => (onLocatorsChange ? onLocatorsChange({ moduleId: v }) : setInnerModuleId(v))
-  const setOnlyWithData = (v: boolean) =>
-    onLocatorsChange ? onLocatorsChange({ onlyWithData: v }) : setInnerOnlyWithData(v)
 
   const expandable = !!renderExpandedDetail
 

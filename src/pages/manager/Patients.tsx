@@ -4,7 +4,6 @@ import { useAppStorage } from '@/hooks/useAppStorage'
 import { usePageSize } from '@/hooks/usePageSize'
 import StatCard from '@/components/StatCard'
 import { Card, CardContent } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
@@ -17,15 +16,6 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
   PieChart, Pie, Cell,
 } from 'recharts'
-
-const PATIENT_STATUS_LABELS: Record<string, string> = {
-  screening: '筛选',
-  enrolled: '入组',
-  treatment: '治疗期',
-  completed: '完成研究',
-  withdrawn: '退出研究',
-  lost: '失访',
-}
 
 const PATIENT_STATUS_COLORS: Record<string, string> = {
   screening: '#3b82f6',

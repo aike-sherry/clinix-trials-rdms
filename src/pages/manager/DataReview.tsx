@@ -20,8 +20,6 @@ import { PATIENT_STATUS_LABELS, cellText } from './dataMgmt/shared'
 import ProgressOverview from '@/components/dataMgmt/ProgressOverview'
 import ProjectMatrix from '@/components/dataMgmt/ProjectMatrix'
 
-const PAGE_SIZE_OPTIONS = [10, 20, 50, 100]
-
 function genId() {
   return Math.random().toString(36).slice(2) + Date.now().toString(36)
 }
