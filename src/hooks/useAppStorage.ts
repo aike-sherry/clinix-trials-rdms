@@ -9,6 +9,7 @@ const MIG_QUERY_KEY = 'clini_x_rdms_mig_query'   // 一次性迁移：补充演�
 const MIG_VISITINFO_KEY = 'clini_x_rdms_mig_visitinfo' // 一次性迁移：内置「访视信息」模块
 const MIG_AUDIT_KEY = 'clini_x_rdms_mig_audit' // 一次性迁移：补充演示审计留痕
 const MIG_LOCKED_KEY = 'clini_x_rdms_mig_locked' // 一次性迁移：补充全链路演示患者（PDF 下载演示）
+const MIG_CHECKDEMO_KEY = 'clini_x_rdms_mig_checkdemo' // 一次性迁移：注入智能核查演示用「问题数据」
 const MIG_EXTFILL_KEY = 'clini_x_rdms_mig_extfill' // 一次性迁移：人口学特征字段开启外部数据填充（HIS 抓取演示）
 const MIG_INTEG_KEY = 'clini_x_rdms_mig_integration' // 一次性迁移：存量主持人账号补充「数据集成」模块权限
 const DATA_VERSION = '27' // 数据版本号，变更时自动重置缓存
@@ -226,6 +227,56 @@ function getDefaultModules(): ModuleLibraryItem[] {
   ]
 }
 
+// ---------- 智能核查演示：向记录数最多的 1-2 位患者注入少量「问题数据」 ----------
+// 覆盖规则：L01-L08 各一条、R01 一条（范围/统计类规则由真实分布自然触发）
+function injectCheckDemoFlaws(data: AppStorage): boolean {
+  const countBy = new Map<string, number>()
+  data.visitData.forEach((v) => countBy.set(v.patientId, (countBy.get(v.patientId) ?? 0) + 1))
+  const candidates = data.patients
+    .filter((p) => (countBy.get(p.id) ?? 0) >= 5)
+    .sort((a, b) => (countBy.get(b.id) ?? 0) - (countBy.get(a.id) ?? 0))
+  const t1 = candidates[0]
+  const t2 = candidates[1]
+  if (!t1) return false
+  let changed = false
+  const patch = (patientId: string, has: string, fn: (d: Record<string, unknown>) => Record<string, unknown>) => {
+    const rec = data.visitData.find((v) => v.patientId === patientId && v.data && has in v.data)
+    if (!rec) return
+    rec.data = fn(rec.data as Record<string, unknown>)
+    changed = true
+  }
+  // 患者甲：血压矛盾 / AE 日期倒置+转归矛盾 / 知情书版本日期晚于签署 / BMI 不符
+  patch(t1.id, 'systolicBP', (d) => ({ ...d, systolicBP: 95, diastolicBP: 105 }))
+  patch(t1.id, 'aeRecords', (d) => {
+    const rows = Array.isArray(d.aeRecords) ? [...(d.aeRecords as Record<string, unknown>[])] : []
+    if (rows[0]) rows[0] = { ...rows[0], onsetDate: '2026-03-10', endDate: '2026-03-05', outcome: '已结束' }
+    if (rows[1]) rows[1] = { ...rows[1], endDate: '2026-03-08', outcome: '持续中' }
+    else rows.push({ seq: 2, eventName: '头晕', onsetDate: '2026-03-01', severity: 'mild', drugRelation: 'possibly_related', actionTaken: '观察随访', endDate: '2026-03-08', outcome: '持续中' })
+    return { ...d, aeRecords: rows }
+  })
+  patch(t1.id, 'signDate', (d) => ({ ...d, icfVersionDate: '2026-02-10', signDate: '2026-01-20' }))
+  patch(t1.id, 'height', (d) => ({ ...d, height: 170, weight: 70, bmi: 30.5 }))
+  if (t2) {
+    // 患者乙：体温超生理极限 / 合并用药日期倒置 / 疗效评估早于入组 / 知情晚于入组
+    patch(t2.id, 'temperature', (d) => ({ ...d, temperature: 43.6 }))
+    patch(t2.id, 'medRecords', (d) => {
+      const rows = Array.isArray(d.medRecords) ? [...(d.medRecords as Record<string, unknown>[])] : []
+      if (rows[0]) rows[0] = { ...rows[0], startDate: '2026-03-10', endDate: '2026-03-01', status: '已结束' }
+      return { ...d, medRecords: rows }
+    })
+    const enroll = t2.enrollmentDate
+    if (enroll && /^\d{4}-\d{2}-\d{2}/.test(enroll)) {
+      const day = 24 * 3600 * 1000
+      const minus10 = new Date(new Date(enroll).getTime() - 10 * day).toISOString().slice(0, 10)
+      const plus5 = new Date(new Date(enroll).getTime() + 5 * day).toISOString().slice(0, 10)
+      patch(t2.id, 'evalDate', (d) => ({ ...d, evalDate: minus10 }))
+      t2.consentDate = plus5
+      changed = true
+    }
+  }
+  return changed
+}
+
 function getInitialData(): AppStorage {
   try {
     // 版本号检查：不匹配则重置缓存（保留登录会话）
@@ -394,6 +445,11 @@ function getInitialData(): AppStorage {
         if (changed) localStorage.setItem(STORAGE_KEY, JSON.stringify(parsed))
         localStorage.setItem(MIG_INTEG_KEY, '1')
       }
+      // 一次性迁移：注入智能核查演示用「问题数据」
+      if (!localStorage.getItem(MIG_CHECKDEMO_KEY)) {
+        if (injectCheckDemoFlaws(parsed)) localStorage.setItem(STORAGE_KEY, JSON.stringify(parsed))
+        localStorage.setItem(MIG_CHECKDEMO_KEY, '1')
+      }
       return parsed
     }
     const demo = getDemoSeed()
@@ -408,6 +464,8 @@ function getInitialData(): AppStorage {
       projectPermissions: demo.projectPermissions,
       ...(preservedUser ? { currentUser: preservedUser } : {}),
     }
+    injectCheckDemoFlaws(data)
+    localStorage.setItem(MIG_CHECKDEMO_KEY, '1')
     localStorage.setItem(STORAGE_KEY, JSON.stringify(data))
     localStorage.setItem(VERSION_KEY, DATA_VERSION)
     return data
@@ -425,6 +483,8 @@ function getInitialData(): AppStorage {
     moduleLibrary: getDefaultModules(),
     projectPermissions: demo.projectPermissions,
   }
+  injectCheckDemoFlaws(data)
+  localStorage.setItem(MIG_CHECKDEMO_KEY, '1')
   localStorage.setItem(STORAGE_KEY, JSON.stringify(data))
   localStorage.setItem(VERSION_KEY, DATA_VERSION)
   return data

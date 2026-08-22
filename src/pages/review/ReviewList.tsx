@@ -8,15 +8,32 @@ import { Button } from '@/components/ui/button'
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
-import { ClipboardCheck, ChevronLeft, ChevronRight, Users, FileCheck, BadgeCheck, Hourglass, CheckCheck, PenLine } from 'lucide-react'
+import { ClipboardCheck, ChevronLeft, ChevronRight, Users, FileCheck, BadgeCheck, Hourglass, CheckCheck, PenLine, ScanSearch, Settings2, Send, Loader2 } from 'lucide-react'
 import VisitStatusMatrix from '@/components/dataMgmt/VisitStatusMatrix'
+import { runDataChecks, CHECK_RULES, CATEGORY_LABELS, SEVERITY_LABELS, type CheckIssue, type CheckSeverity, type CheckCategory } from '@/lib/dataChecks'
 
 // 卡片列宽模板（表头与卡片共用）
 const GRID_COLS = 'grid-cols-[0.5fr_1fr_1fr_0.9fr_0.8fr_0.6fr_0.6fr_1.1fr_1.1fr_1.35fr]'
 const HEADERS = ['筛选序号', '研究编号', '筛选编号', '姓名缩写', '当前访视', '应录入', '已完成', '审核进度', '签名进度', '操作']
 
+// 智能核查：徽标配色
+const SEV_STYLE: Record<CheckSeverity, string> = {
+  high: 'bg-red-50 text-red-600 border-red-200',
+  medium: 'bg-amber-50 text-amber-600 border-amber-200',
+  low: 'bg-slate-50 text-slate-500 border-slate-200',
+}
+const CAT_STYLE: Record<CheckCategory, string> = {
+  logic: 'bg-blue-50 text-blue-600 border-blue-200',
+  range: 'bg-orange-50 text-orange-600 border-orange-200',
+  statistical: 'bg-purple-50 text-purple-600 border-purple-200',
+}
+
+function genId() {
+  return Math.random().toString(36).slice(2) + Date.now().toString(36)
+}
+
 export default function ReviewList() {
-  const { projects, patients, visitData, saveVisitData, currentUser } = useAppStorage()
+  const { projects, patients, visitData, saveVisitData, currentUser, queries, saveQuery, moduleLibrary } = useAppStorage()
   const reviewerName = currentUser?.name ?? '管理人员'
   const now = () => new Date().toISOString()
 
@@ -44,6 +61,48 @@ export default function ReviewList() {
   const selectedProjectNo = searchParams.get('projectNo') || 'all'
   // 视图切换：审核清单（逐患者审核/签署）| 访视矩阵（患者 × 访视 录入状态一览）
   const [view, setView] = useState<'list' | 'matrix'>('list')
+
+  // ========== 智能核查 ==========
+  const [checking, setChecking] = useState(false)
+  const [issues, setIssues] = useState<CheckIssue[] | null>(null)
+  const [showRules, setShowRules] = useState(false)
+  const [enabledRules, setEnabledRules] = useState<Set<string>>(new Set(CHECK_RULES.map((r) => r.id)))
+  const [issuedIds, setIssuedIds] = useState<Set<string>>(new Set())
+
+  const runCheck = () => {
+    setChecking(true)
+    setIssues(null)
+    // 模拟分析过程，让「核查中」状态可感知
+    setTimeout(() => {
+      setIssues(runDataChecks({ projects: scopedProjects, patients, visitData, moduleLibrary, enabledRuleIds: enabledRules }))
+      setChecking(false)
+    }, 900)
+  }
+
+  // 发起质疑：疑点 → 正式数据疑问（待回复状态，走现有质疑流程）
+  const issueToQuery = (issue: CheckIssue) => {
+    const patient = patients.find((p) => p.id === issue.patientId)
+    saveQuery({
+      id: genId(),
+      visitDataId: issue.visitDataId ?? '',
+      patientId: issue.patientId,
+      projectId: issue.projectId,
+      visitId: issue.visitId ?? '',
+      moduleId: issue.moduleId ?? '',
+      fieldName: issue.fieldName,
+      fieldLabel: issue.fieldLabel,
+      content: `【智能核查·${issue.ruleName}】${patient ? `受试者 ${patient.nameInitials}（${patient.screeningId || patient.screeningNo}）：` : ''}${issue.description}`,
+      status: 'open',
+      createdBy: currentUser?.id ?? 'manager',
+      createdByName: reviewerName,
+      createdAt: now(),
+    })
+    setIssuedIds((prev) => new Set([...prev, issue.id]))
+  }
+
+  const isIssued = (issue: CheckIssue) =>
+    issuedIds.has(issue.id) ||
+    queries.some((q) => q.fieldName === issue.fieldName && q.patientId === issue.patientId && q.visitDataId === (issue.visitDataId ?? '') && q.content.includes(issue.description.slice(0, 20)))
 
   // 已发布项目的登记患者（可经顶部项目筛选）
   const scopedProjects = useMemo(
@@ -180,6 +239,135 @@ export default function ReviewList() {
           />
         ))}
       </div>
+
+      {/* ==================== 智能核查面板 ==================== */}
+      <Card className="bg-white border-slate-200 overflow-hidden">
+        <CardContent className="p-0">
+          <div className="flex items-center justify-between px-4 py-3 bg-gradient-to-r from-violet-50/80 via-white to-white border-b border-slate-100">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center shadow-sm shadow-violet-200">
+                <ScanSearch className="w-4 h-4 text-white" />
+              </div>
+              <div>
+                <h3 className="text-sm font-semibold text-slate-800">智能核查</h3>
+                <p className="text-[11px] text-slate-400">规则引擎 + 统计算法，自动识别当前范围内的数据疑点（演示版）</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                size="sm" variant="outline"
+                className={`h-8 text-xs ${showRules ? 'border-violet-300 text-violet-600 bg-violet-50' : ''}`}
+                onClick={() => setShowRules(!showRules)}
+              >
+                <Settings2 className="w-3.5 h-3.5 mr-1" /> 核查规则（{enabledRules.size}/{CHECK_RULES.length}）
+              </Button>
+              <Button
+                size="sm"
+                className="h-8 text-xs bg-gradient-to-r from-violet-500 to-purple-600 hover:from-violet-600 hover:to-purple-700 text-white shadow-sm shadow-violet-200"
+                disabled={checking || enabledRules.size === 0}
+                onClick={runCheck}
+              >
+                {checking ? <><Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" /> 核查中…</> : <><ScanSearch className="w-3.5 h-3.5 mr-1" /> 开始核查</>}
+              </Button>
+            </div>
+          </div>
+
+          {/* 规则开关 */}
+          {showRules && (
+            <div className="px-4 py-3 border-b border-slate-100 bg-slate-50/50 grid grid-cols-2 gap-x-6 gap-y-1.5">
+              {CHECK_RULES.map((r) => (
+                <label key={r.id} className="flex items-start gap-2 cursor-pointer group py-0.5">
+                  <input
+                    type="checkbox"
+                    checked={enabledRules.has(r.id)}
+                    onChange={(e) => {
+                      const next = new Set(enabledRules)
+                      if (e.target.checked) next.add(r.id)
+                      else next.delete(r.id)
+                      setEnabledRules(next)
+                    }}
+                    className="mt-0.5 accent-violet-600"
+                  />
+                  <span className="text-xs text-slate-600 group-hover:text-slate-800">
+                    <span className="font-medium">{r.name}</span>
+                    <span className="text-slate-400 ml-1.5">{r.description}</span>
+                  </span>
+                </label>
+              ))}
+            </div>
+          )}
+
+          {/* 核查结果 */}
+          {issues !== null && !checking && (
+            <div className="px-4 py-3">
+              {issues.length === 0 ? (
+                <div className="py-8 text-center">
+                  <BadgeCheck className="w-8 h-8 text-emerald-400 mx-auto mb-2" />
+                  <p className="text-sm text-slate-500">未发现数据疑点，当前范围数据质量良好</p>
+                </div>
+              ) : (
+                <>
+                  <div className="flex items-center gap-2 mb-3 flex-wrap">
+                    <span className="text-xs text-slate-500">共识别 <span className="font-semibold text-slate-700">{issues.length}</span> 项疑点</span>
+                    {(['logic', 'range', 'statistical'] as const).map((c) => {
+                      const n = issues.filter((i) => i.category === c).length
+                      if (n === 0) return null
+                      return (
+                        <span key={c} className={`text-[11px] px-2 py-0.5 rounded-full border ${CAT_STYLE[c]}`}>
+                          {CATEGORY_LABELS[c]} {n}
+                        </span>
+                      )
+                    })}
+                    <span className="text-[11px] text-slate-300 ml-auto">AI 标记仅供参考，正式质疑需人工确认后发起</span>
+                  </div>
+                  <div className="border border-slate-100 rounded-lg divide-y divide-slate-50 max-h-[420px] overflow-y-auto">
+                    {issues.map((issue) => {
+                      const patient = patients.find((p) => p.id === issue.patientId)
+                      const proj = projects.find((p) => p.id === issue.projectId)
+                      const visitName = proj?.visits.find((v) => v.id === issue.visitId)?.name
+                      const moduleName = proj?.crfModules.find((m) => m.id === issue.moduleId)?.name
+                        ?? moduleLibrary.find((m) => m.id === issue.moduleId)?.name
+                      const issued = isIssued(issue)
+                      return (
+                        <div key={issue.id} className="flex items-center gap-3 px-3 py-2.5 hover:bg-slate-50/60">
+                          <span className={`shrink-0 text-[11px] px-1.5 py-0.5 rounded border ${SEV_STYLE[issue.severity]}`}>
+                            {SEVERITY_LABELS[issue.severity]}
+                          </span>
+                          <span className={`shrink-0 text-[11px] px-1.5 py-0.5 rounded border ${CAT_STYLE[issue.category]}`}>
+                            {CATEGORY_LABELS[issue.category]}
+                          </span>
+                          <div className="flex-1 min-w-0">
+                            <div className="text-xs text-slate-700 leading-relaxed">{issue.description}</div>
+                            <div className="text-[11px] text-slate-400 mt-0.5 truncate">
+                              {issue.ruleName}
+                              {patient && ` · ${patient.nameInitials}（${patient.screeningId || patient.screeningNo}）`}
+                              {visitName && ` · ${visitName}`}
+                              {moduleName && ` · ${moduleName}`}
+                              {issue.valueText && <span className="text-slate-500"> · 当前值：{issue.valueText}</span>}
+                            </div>
+                          </div>
+                          {issue.patientId ? (
+                            <Button
+                              size="sm" variant="outline"
+                              className={`h-7 text-xs shrink-0 ${issued ? 'border-slate-200 text-slate-300 cursor-default' : 'border-violet-200 text-violet-600 hover:bg-violet-50'}`}
+                              disabled={issued}
+                              onClick={() => issueToQuery(issue)}
+                            >
+                              <Send className="w-3 h-3 mr-1" /> {issued ? '已发起质疑' : '发起质疑'}
+                            </Button>
+                          ) : (
+                            <span className="shrink-0 text-[11px] text-slate-300 px-2">跨患者预警</span>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* 表头 + 全局一键审核 */}
       <div className="flex items-center gap-3 px-1">
