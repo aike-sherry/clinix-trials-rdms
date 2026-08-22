@@ -11,8 +11,8 @@
  */
 export type UserRole = 'super_admin' | 'admin' | 'manager' | 'data_entry'
 
-/** 可授权的功能模块键 */
-export type ModuleKey = 'patients' | 'visits' | 'dataMgmt' | 'statistics' | 'queries' | 'integration'
+/** 可授权的功能模块键（integration / smartCheck 为特殊模块，仅后台可配置） */
+export type ModuleKey = 'patients' | 'visits' | 'dataMgmt' | 'statistics' | 'queries' | 'integration' | 'smartCheck'
 
 export interface User {
   id: string

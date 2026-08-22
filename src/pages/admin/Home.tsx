@@ -54,6 +54,7 @@ const MODULE_LABELS: [string, string][] = [
   ['statistics', '统计分析'],
   ['queries', '疑问管理'],
   ['integration', '数据集成'],
+  ['smartCheck', '智能核查'],
 ]
 
 /**

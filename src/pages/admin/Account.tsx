@@ -68,7 +68,7 @@ const AVATAR_COLORS: Record<UserRole, string> = {
   data_entry: 'bg-amber-100 text-amber-600',
 }
 
-/** 可授权的功能模块（课题主持人 / 数据录入） */
+/** 可授权的功能模块（课题主持人 / 数据录入）；integration / smartCheck 为特殊模块，仅后台可配置 */
 const MODULE_OPTIONS: { key: ModuleKey; label: string }[] = [
   { key: 'patients', label: '患者管理' },
   { key: 'visits', label: '访视管理' },
@@ -76,6 +76,7 @@ const MODULE_OPTIONS: { key: ModuleKey; label: string }[] = [
   { key: 'statistics', label: '统计分析' },
   { key: 'queries', label: '疑问管理' },
   { key: 'integration', label: '数据集成' },
+  { key: 'smartCheck', label: '智能核查' },
 ]
 const ALL_MODULES = MODULE_OPTIONS.map((m) => m.key)
 
@@ -327,12 +328,12 @@ export default function AdminAccount() {
       headers: ['序号', '姓名', '用户名', '角色', '邮箱', '创建日期', '状态', '结束日期', '操作'],
     },
     manager: {
-      cols: 'grid-cols-[0.4fr_1fr_1.3fr_1.3fr_1fr_0.8fr_0.8fr_0.8fr_0.8fr_0.8fr_0.8fr_1.6fr]',
-      headers: ['序号', '姓名', '单位', '邮箱', '创建日期', '状态', '患者管理', '访视管理', '数据管理', '统计分析', '疑问管理', '操作'],
+      cols: 'grid-cols-[0.4fr_1fr_1.2fr_1.2fr_0.9fr_0.7fr_0.75fr_0.75fr_0.75fr_0.75fr_0.75fr_0.75fr_0.75fr_1.5fr]',
+      headers: ['序号', '姓名', '单位', '邮箱', '创建日期', '状态', '患者管理', '访视管理', '数据管理', '统计分析', '疑问管理', '数据集成', '智能核查', '操作'],
     },
     data_entry: {
-      cols: 'grid-cols-[0.4fr_1fr_1.3fr_1.3fr_1.1fr_1fr_0.8fr_0.8fr_0.8fr_0.8fr_0.8fr_0.8fr_1.6fr]',
-      headers: ['序号', '姓名', '单位', '邮箱', '项目授权', '创建日期', '状态', '患者管理', '访视管理', '数据管理', '统计分析', '疑问管理', '操作'],
+      cols: 'grid-cols-[0.4fr_1fr_1.2fr_1.2fr_1fr_0.9fr_0.7fr_0.75fr_0.75fr_0.75fr_0.75fr_0.75fr_0.75fr_0.75fr_1.5fr]',
+      headers: ['序号', '姓名', '单位', '邮箱', '项目授权', '创建日期', '状态', '患者管理', '访视管理', '数据管理', '统计分析', '疑问管理', '数据集成', '智能核查', '操作'],
     },
   }
   const grid = GRIDS[tab]

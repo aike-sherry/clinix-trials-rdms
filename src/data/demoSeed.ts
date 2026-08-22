@@ -895,10 +895,10 @@ export function getDemoUsers(): User[] {
     // 管理员：负责后台管理，授权课题主持人并开通模块
     { id: 'user_admin_02', username: 'admin02', name: '周婷', role: 'admin', organization: '小乂临研', email: 'zhouting@xiaoyi.cn', password: '123456', grantedBy: 'user_admin_01', ...base },
     // 课题主持人：账号与模块权限由管理员授权
-    { id: 'user_manager_01', username: 'manager1', name: '张慈', role: 'manager', organization: '上海瑞金医院', department: '内分泌科', email: 'zhangci@hospital.cn', password: '123456', grantedBy: 'user_admin_02', moduleAccess: ['patients', 'visits', 'dataMgmt', 'statistics', 'queries', 'integration'], ...base },
+    { id: 'user_manager_01', username: 'manager1', name: '张慈', role: 'manager', organization: '上海瑞金医院', department: '内分泌科', email: 'zhangci@hospital.cn', password: '123456', grantedBy: 'user_admin_02', moduleAccess: ['patients', 'visits', 'dataMgmt', 'statistics', 'queries', 'integration', 'smartCheck'], ...base },
     { id: 'user_manager_02', username: 'manager2', name: '李华', role: 'manager', organization: '上海第九人民医院', department: '烧伤整形科', email: 'lihua@hospital.cn', password: '123456', grantedBy: 'user_admin_02', moduleAccess: ['patients', 'visits', 'dataMgmt', 'integration'], ...base },
     // 数据录入人员：权限由课题主持人授权，后台可进一步开通模块
-    { id: 'user_entry_01', username: 'entry01', name: '王芳', role: 'data_entry', organization: '上海瑞金医院', department: '内分泌科', email: 'wangfang@hospital.cn', phone: '138****2201', password: '123456', grantedBy: 'user_manager_01', moduleAccess: ['patients', 'visits', 'dataMgmt', 'queries'], ...base },
+    { id: 'user_entry_01', username: 'entry01', name: '王芳', role: 'data_entry', organization: '上海瑞金医院', department: '内分泌科', email: 'wangfang@hospital.cn', phone: '138****2201', password: '123456', grantedBy: 'user_manager_01', moduleAccess: ['patients', 'visits', 'dataMgmt', 'queries', 'smartCheck'], ...base },
     { id: 'user_entry_02', username: 'entry02', name: '刘洋', role: 'data_entry', organization: '北京协和医院', department: '内分泌科', email: 'liuyang@hospital.cn', phone: '139****3345', password: '123456', grantedBy: 'user_manager_01', moduleAccess: ['patients', 'visits'], ...base },
     { id: 'user_entry_03', username: 'entry03', name: '陈静', role: 'data_entry', organization: '江苏大学附属医院', department: '呼吸与危重症医学科', email: 'chenjing@hospital.cn', phone: '137****8890', password: '123456', grantedBy: 'user_manager_02', moduleAccess: ['patients'], ...base },
   ]

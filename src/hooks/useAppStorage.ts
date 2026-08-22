@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react'
-import type { AppStorage, Project, Patient, VisitData, ModuleLibraryItem, CRFField, User, ProjectPermission, AuditLog, DataQuery } from '@/types'
+import type { AppStorage, Project, Patient, VisitData, ModuleLibraryItem, CRFField, User, ProjectPermission, AuditLog, DataQuery, ModuleKey } from '@/types'
 import { getDemoSeed, getDemoProjects, getDemoQueries, getDemoAuditLogs, getDemoLockedPatient } from '@/data/demoSeed'
 
 const STORAGE_KEY = 'clini_x_rdms_data'
@@ -12,6 +12,7 @@ const MIG_LOCKED_KEY = 'clini_x_rdms_mig_locked' // 一次性迁移：补充全�
 const MIG_CHECKDEMO_KEY = 'clini_x_rdms_mig_checkdemo' // 一次性迁移：注入智能核查演示用「问题数据」
 const MIG_EXTFILL_KEY = 'clini_x_rdms_mig_extfill' // 一次性迁移：人口学特征字段开启外部数据填充（HIS 抓取演示）
 const MIG_INTEG_KEY = 'clini_x_rdms_mig_integration' // 一次性迁移：存量主持人账号补充「数据集成」模块权限
+const MIG_SMARTCHECK_KEY = 'clini_x_rdms_mig_smartcheck' // 一次性迁移：存量账号默认开通「智能核查」（后台可再单独关闭）
 const DATA_VERSION = '27' // 数据版本号，变更时自动重置缓存
 
 
@@ -449,6 +450,21 @@ function getInitialData(): AppStorage {
       if (!localStorage.getItem(MIG_CHECKDEMO_KEY)) {
         if (injectCheckDemoFlaws(parsed)) localStorage.setItem(STORAGE_KEY, JSON.stringify(parsed))
         localStorage.setItem(MIG_CHECKDEMO_KEY, '1')
+      }
+      // 一次性迁移：存量主持人/录入账号默认开通「智能核查」模块权限
+      // 注意：必须为一次性（非持续校正），否则后台无法对客户关闭该功能
+      if (!localStorage.getItem(MIG_SMARTCHECK_KEY)) {
+        let changed = false
+        const grant = <T extends { role: string; moduleAccess?: ModuleKey[] }>(u: T): T => {
+          if ((u.role !== 'manager' && u.role !== 'data_entry') || !u.moduleAccess) return u
+          if (u.moduleAccess.includes('smartCheck')) return u
+          changed = true
+          return { ...u, moduleAccess: [...u.moduleAccess, 'smartCheck'] }
+        }
+        parsed.users = parsed.users.map(grant)
+        if (parsed.currentUser) parsed.currentUser = grant(parsed.currentUser)
+        if (changed) localStorage.setItem(STORAGE_KEY, JSON.stringify(parsed))
+        localStorage.setItem(MIG_SMARTCHECK_KEY, '1')
       }
       return parsed
     }

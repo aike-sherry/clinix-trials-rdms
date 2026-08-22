@@ -63,6 +63,8 @@ export default function ReviewList() {
   const [view, setView] = useState<'list' | 'matrix'>('list')
 
   // ========== 智能核查 ==========
+  // 功能开关：由平台后台在账号权限中配置（特殊模块）；未设置 moduleAccess 的旧数据默认开通
+  const smartCheckOn = !currentUser?.moduleAccess || currentUser.moduleAccess.includes('smartCheck')
   const [checking, setChecking] = useState(false)
   const [issues, setIssues] = useState<CheckIssue[] | null>(null)
   const [showRules, setShowRules] = useState(false)
@@ -240,7 +242,8 @@ export default function ReviewList() {
         ))}
       </div>
 
-      {/* ==================== 智能核查面板 ==================== */}
+      {/* ==================== 智能核查面板（后台可配置开关） ==================== */}
+      {smartCheckOn && (
       <Card className="bg-white border-slate-200 overflow-hidden">
         <CardContent className="p-0">
           <div className="flex items-center justify-between px-4 py-3 bg-gradient-to-r from-violet-50/80 via-white to-white border-b border-slate-100">
@@ -272,28 +275,55 @@ export default function ReviewList() {
             </div>
           </div>
 
-          {/* 规则开关 */}
+          {/* 规则开关（按类别分组：规则编号 / 级别 / 判定逻辑与阈值） */}
           {showRules && (
-            <div className="px-4 py-3 border-b border-slate-100 bg-slate-50/50 grid grid-cols-2 gap-x-6 gap-y-1.5">
-              {CHECK_RULES.map((r) => (
-                <label key={r.id} className="flex items-start gap-2 cursor-pointer group py-0.5">
-                  <input
-                    type="checkbox"
-                    checked={enabledRules.has(r.id)}
-                    onChange={(e) => {
-                      const next = new Set(enabledRules)
-                      if (e.target.checked) next.add(r.id)
-                      else next.delete(r.id)
-                      setEnabledRules(next)
-                    }}
-                    className="mt-0.5 accent-violet-600"
-                  />
-                  <span className="text-xs text-slate-600 group-hover:text-slate-800">
-                    <span className="font-medium">{r.name}</span>
-                    <span className="text-slate-400 ml-1.5">{r.description}</span>
-                  </span>
-                </label>
-              ))}
+            <div className="px-4 py-3 border-b border-slate-100 bg-slate-50/50 space-y-3.5">
+              {(['logic', 'range', 'statistical'] as const).map((cat) => {
+                const rules = CHECK_RULES.filter((r) => r.category === cat)
+                const allOn = rules.every((r) => enabledRules.has(r.id))
+                return (
+                  <div key={cat}>
+                    <div className="flex items-center gap-2 mb-1.5">
+                      <span className={`text-[11px] px-2 py-0.5 rounded-full border ${CAT_STYLE[cat]}`}>{CATEGORY_LABELS[cat]}</span>
+                      <span className="text-[11px] text-slate-400">{rules.filter((r) => enabledRules.has(r.id)).length}/{rules.length} 条已启用</span>
+                      <button
+                        type="button"
+                        className="ml-auto text-[11px] text-violet-500 hover:text-violet-700"
+                        onClick={() => {
+                          const next = new Set(enabledRules)
+                          rules.forEach((r) => (allOn ? next.delete(r.id) : next.add(r.id)))
+                          setEnabledRules(next)
+                        }}
+                      >
+                        {allOn ? '清空本类' : '全选本类'}
+                      </button>
+                    </div>
+                    <div className="grid grid-cols-2 gap-x-6 gap-y-2">
+                      {rules.map((r) => (
+                        <label key={r.id} className="flex items-start gap-2 cursor-pointer group py-0.5">
+                          <input
+                            type="checkbox"
+                            checked={enabledRules.has(r.id)}
+                            onChange={(e) => {
+                              const next = new Set(enabledRules)
+                              if (e.target.checked) next.add(r.id)
+                              else next.delete(r.id)
+                              setEnabledRules(next)
+                            }}
+                            className="mt-0.5 accent-violet-600"
+                          />
+                          <span className="text-xs text-slate-600 group-hover:text-slate-800 leading-relaxed">
+                            <span className="font-mono text-[10px] text-slate-400 mr-1">{r.id}</span>
+                            <span className="font-medium">{r.name}</span>
+                            <span className={`ml-1.5 text-[10px] px-1 py-px rounded border ${SEV_STYLE[r.severity]}`}>{SEVERITY_LABELS[r.severity]}</span>
+                            <span className="block text-[11px] text-slate-400 mt-0.5">{r.description}</span>
+                          </span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                )
+              })}
             </div>
           )}
 
@@ -368,6 +398,7 @@ export default function ReviewList() {
           )}
         </CardContent>
       </Card>
+      )}
 
       {/* 表头 + 全局一键审核 */}
       <div className="flex items-center gap-3 px-1">

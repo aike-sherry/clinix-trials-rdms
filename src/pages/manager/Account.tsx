@@ -53,6 +53,11 @@ const MODULE_OPTIONS: { key: ModuleKey; label: string }[] = [
   { key: 'statistics', label: '统计分析' },
   { key: 'queries', label: '疑问管理' },
 ]
+/** 特殊模块：仅平台后台可配置，管理端只读展示 */
+const SPECIAL_MODULE_OPTIONS: { key: ModuleKey; label: string }[] = [
+  { key: 'integration', label: '数据集成' },
+  { key: 'smartCheck', label: '智能核查' },
+]
 const ALL_MODULES = MODULE_OPTIONS.map((m) => m.key)
 
 // 账号状态：使用中 / 冻结 / 已到期
@@ -441,6 +446,10 @@ export default function ManagerAccount() {
                     <span className="text-slate-400">开通模块：</span>
                     {MODULE_OPTIONS.filter((m) => (currentUser.moduleAccess ?? ALL_MODULES).includes(m.key)).map((m) => (
                       <Badge key={m.key} variant="outline" className="text-[10px] bg-teal-50 text-teal-600 border-teal-200">{m.label}</Badge>
+                    ))}
+                    {/* 特殊模块（数据集成 / 智能核查）：仅后台可配置，此处只读展示 */}
+                    {SPECIAL_MODULE_OPTIONS.filter((m) => !currentUser.moduleAccess || currentUser.moduleAccess.includes(m.key)).map((m) => (
+                      <Badge key={m.key} variant="outline" className="text-[10px] bg-violet-50 text-violet-600 border-violet-200">{m.label} · 后台配置</Badge>
                     ))}
                     {(currentUser.moduleAccess ?? ALL_MODULES).length === 0 && <span className="text-slate-400">暂无</span>}
                   </div>
