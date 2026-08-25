@@ -193,10 +193,13 @@ export default function ModuleLibraryPage() {
     if (selectedModule?.id === item.id) setSelectedModule(item)
   }
 
-  const handleDeleteModule = (id: string) => {
-    if (!confirm('确定删除此模块？')) return
-    deleteModuleLibraryItem(id)
-    if (selectedModule?.id === id) setSelectedModule(null)
+  const handleDeleteModule = (module: ModuleLibraryItem) => {
+    const tip = module.isSystem
+      ? `「${module.name}」为系统预置模块，删除后新建项目将无法再选用该模块（已引用该模块的在研项目数据不受影响）。\n\n确定删除？`
+      : `确定删除模块「${module.name}」？`
+    if (!confirm(tip)) return
+    deleteModuleLibraryItem(module.id)
+    if (selectedModule?.id === module.id) setSelectedModule(null)
   }
 
   const handleAddFieldByType = (type: FieldType) => {
@@ -529,19 +532,18 @@ export default function ModuleLibraryPage() {
                         >
                           <Copy className="w-3.5 h-3.5" />
                         </Button>
-                        {!module.isSystem && (
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="w-7 h-7 text-slate-400 hover:text-red-500"
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              handleDeleteModule(module.id)
-                            }}
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </Button>
-                        )}
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="w-7 h-7 text-slate-400 hover:text-red-500"
+                          title={module.isSystem ? '删除系统预置模块' : '删除模块'}
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleDeleteModule(module)
+                          }}
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </Button>
                       </div>
                     </div>
                   </CardContent>
@@ -599,19 +601,18 @@ export default function ModuleLibraryPage() {
                       >
                         <Copy className="w-3 h-3" />
                       </Button>
-                      {!module.isSystem && (
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="w-6 h-6 text-slate-400 hover:text-red-500"
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            handleDeleteModule(module.id)
-                          }}
-                        >
-                          <Trash2 className="w-3 h-3" />
-                        </Button>
-                      )}
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="w-6 h-6 text-slate-400 hover:text-red-500"
+                        title={module.isSystem ? '删除系统预置模块' : '删除模块'}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          handleDeleteModule(module)
+                        }}
+                      >
+                        <Trash2 className="w-3 h-3" />
+                      </Button>
                     </div>
                   </CardContent>
                 </Card>
