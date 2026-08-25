@@ -164,6 +164,9 @@ export default function ModuleLibraryPage() {
   // 分类筛选：固定展示全部 9 个标准分类（含暂无模块的分类）
   const categories = CATEGORIES
 
+  // 拖拽排序仅在「全部 + 无搜索」时可用：筛选后的子集排序会破坏完整模块列表
+  const canDragModules = search === '' && activeCategory === '全部'
+
   const handleCreateModule = () => {
     setEditingModule({ name: '', description: '', category: '其他', fields: [] })
     setShowModuleDialog(true)
@@ -306,6 +309,12 @@ export default function ModuleLibraryPage() {
 
   const handleModuleDrop = (e: React.DragEvent, targetId: string) => {
     e.preventDefault()
+    // 安全守卫：筛选状态下禁止落点（filtered 为子集，直接替换会丢失未显示的模块）
+    if (filtered.length !== moduleLibrary.length) {
+      setDragModuleId(null)
+      setDragOverModuleId(null)
+      return
+    }
     if (!dragModuleId || dragModuleId === targetId) {
       setDragModuleId(null)
       setDragOverModuleId(null)
@@ -395,7 +404,7 @@ export default function ModuleLibraryPage() {
     <div className="space-y-5">
       {/* 说明 + 操作栏 */}
       <div className="flex items-center justify-between">
-        <p className="text-sm text-slate-400">管理可复用的 CRF 模块，支持拖拽组合到访视中</p>
+        <p className="text-sm text-slate-400">管理可复用的 CRF 模块，卡片可拖拽排序，支持拖拽组合到访视中</p>
         <div className="flex items-center gap-2">
           <Button variant="outline" className="border-teal-200 text-teal-600 hover:bg-teal-50" onClick={() => setShowAgent(true)}>
             <Sparkles className="w-4 h-4 mr-1" /> AI 设计助手
@@ -476,7 +485,7 @@ export default function ModuleLibraryPage() {
                 // 选中状态：横向列表卡片
                 <Card
                   key={module.id}
-                  draggable
+                  draggable={canDragModules}
                   onDragStart={(e) => handleModuleDragStart(e, module.id)}
                   onDragOver={(e) => handleModuleDragOver(e, module.id)}
                   onDrop={(e) => handleModuleDrop(e, module.id)}
@@ -552,7 +561,16 @@ export default function ModuleLibraryPage() {
                 // 未选中状态：网格卡片（每行2个）
                 <Card
                   key={module.id}
-                  className="cursor-pointer transition-all hover:shadow-md"
+                  draggable={canDragModules}
+                  onDragStart={(e) => handleModuleDragStart(e, module.id)}
+                  onDragOver={(e) => handleModuleDragOver(e, module.id)}
+                  onDrop={(e) => handleModuleDrop(e, module.id)}
+                  onDragEnd={handleModuleDragEnd}
+                  className={`cursor-pointer transition-all hover:shadow-md ${
+                    dragOverModuleId === module.id && dragModuleId !== module.id
+                      ? 'ring-2 ring-teal-400 border-teal-400 bg-teal-50/40'
+                      : ''
+                  } ${dragModuleId === module.id ? 'opacity-50' : ''}`}
                   onClick={() => setSelectedModule(module)}
                 >
                   <CardContent className="p-4 flex flex-col items-center text-center">
