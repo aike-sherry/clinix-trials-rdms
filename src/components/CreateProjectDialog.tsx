@@ -37,11 +37,13 @@ export default function CreateProjectDialog({
   const { saveProject } = useAppStorage()
   const [newProject, setNewProject] = useState<Partial<Project>>({})
   const [createStage, setCreateStage] = useState<CreateStage>('立项')
+  const [deployEnv, setDeployEnv] = useState<'public' | 'intranet'>('public')
   const [newCenters, setNewCenters] = useState<Partial<Center>[]>([])
 
   const resetForm = () => {
     setNewProject({})
     setCreateStage('立项')
+    setDeployEnv('public')
     setNewCenters([])
   }
 
@@ -75,6 +77,7 @@ export default function CreateProjectDialog({
       targetEnrollment: newProject.targetEnrollment,
       budget: newProject.budget || 0,
       centers: centers.length > 0 ? centers : undefined,
+      deployEnv,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
       visits: [],
@@ -160,15 +163,37 @@ export default function CreateProjectDialog({
                   </select>
                 </div>
                 <div>
-                  <Label className="text-sm">主持单位</Label>
-                  <Input
-                    placeholder="如：上海瑞金医院"
-                    value={newProject.researchCenter || ''}
-                    onChange={(e) => setNewProject({ ...newProject, researchCenter: e.target.value })}
-                  />
+                  <Label className="text-sm">部署环境 <span className="text-red-500">*</span></Label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setDeployEnv('public')}
+                      className={`h-9 rounded-md border text-xs font-medium transition-colors ${
+                        deployEnv === 'public'
+                          ? 'bg-sky-50 border-sky-300 text-sky-700'
+                          : 'bg-white border-slate-200 text-slate-500 hover:border-slate-300'
+                      }`}
+                    >
+                      公网部署
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setDeployEnv('intranet')}
+                      className={`h-9 rounded-md border text-xs font-medium transition-colors ${
+                        deployEnv === 'intranet'
+                          ? 'bg-teal-50 border-teal-300 text-teal-700'
+                          : 'bg-white border-slate-200 text-slate-500 hover:border-slate-300'
+                      }`}
+                    >
+                      内网部署
+                    </button>
+                  </div>
+                  <p className="text-[11px] text-slate-400 mt-1">
+                    {deployEnv === 'public' ? '多中心研究：一键发布，云端直接生效' : '医院局域网：导出配置包，内网导入生效'}
+                  </p>
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-3 gap-3">
                 <div>
                   <Label className="text-sm">主要研究者</Label>
                   <Input
@@ -183,6 +208,14 @@ export default function CreateProjectDialog({
                     placeholder="如：内分泌科"
                     value={newProject.department || ''}
                     onChange={(e) => setNewProject({ ...newProject, department: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <Label className="text-sm">主持单位</Label>
+                  <Input
+                    placeholder="如：上海瑞金医院"
+                    value={newProject.researchCenter || ''}
+                    onChange={(e) => setNewProject({ ...newProject, researchCenter: e.target.value })}
                   />
                 </div>
               </div>

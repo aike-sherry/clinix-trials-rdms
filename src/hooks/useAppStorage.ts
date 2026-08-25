@@ -13,6 +13,7 @@ const MIG_CHECKDEMO_KEY = 'clini_x_rdms_mig_checkdemo' // 一次性迁移：注�
 const MIG_EXTFILL_KEY = 'clini_x_rdms_mig_extfill' // 一次性迁移：人口学特征字段开启外部数据填充（HIS 抓取演示）
 const MIG_INTEG_KEY = 'clini_x_rdms_mig_integration' // 一次性迁移：存量主持人账号补充「数据集成」模块权限
 const MIG_SMARTCHECK_KEY = 'clini_x_rdms_mig_smartcheck' // 一次性迁移：存量账号默认开通「智能核查」（后台可再单独关闭）
+const MIG_DEPLOYENV_KEY = 'clini_x_rdms_mig_deployenv' // 一次性迁移：存量项目补充「部署环境」字段（多中心默认公网，单中心默认内网）
 const DATA_VERSION = '27' // 数据版本号，变更时自动重置缓存
 
 
@@ -437,6 +438,22 @@ function getInitialData(): AppStorage {
         })
         if (changed) localStorage.setItem(STORAGE_KEY, JSON.stringify(parsed))
         localStorage.setItem(MIG_EXTFILL_KEY, '1')
+      }
+      // 一次性迁移：存量项目补充「部署环境」（仅做加法；已知项目按约定，未知项目按中心数推断：多中心→公网，单中心→内网）
+      if (!localStorage.getItem(MIG_DEPLOYENV_KEY)) {
+        const KNOWN: Record<string, 'public' | 'intranet'> = {
+          CN101CLCT06: 'public', CN102CLCT11: 'public', CN105CLCT03: 'public',
+          CN103CLCT02: 'intranet', CN104CLCT09: 'intranet',
+        }
+        let changed = false
+        parsed.projects = parsed.projects.map((proj) => {
+          if (proj.deployEnv) return proj
+          changed = true
+          const inferred = (proj.centers?.length ?? 0) > 1 ? 'public' as const : 'intranet' as const
+          return { ...proj, deployEnv: KNOWN[proj.projectNo] ?? inferred }
+        })
+        if (changed) localStorage.setItem(STORAGE_KEY, JSON.stringify(parsed))
+        localStorage.setItem(MIG_DEPLOYENV_KEY, '1')
       }
       // 持续校正：课题主持人账号须含「数据集成」模块权限（兼容旧种子与版本重置导致的丢失）
       {

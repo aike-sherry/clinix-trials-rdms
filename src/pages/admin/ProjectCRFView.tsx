@@ -20,6 +20,7 @@ import {
 import VisitPlanMatrix from '@/components/VisitPlanMatrix'
 import { CRFAgentChat } from '@/components/CRFAgentChat'
 import type { CRFPlan } from '@/utils/crfAgent'
+import { buildPayload, buildRecord, suggestVersion } from '@/lib/crfPackage'
 
 // ==================== 常量 ====================
 const FIELD_TYPE_ICONS: Record<FieldType, React.ReactNode> = {
@@ -165,7 +166,7 @@ function ModuleInfoDialog({ open, onOpenChange, module, onSave }: {
 // ==================== 主页面 ====================
 export default function ProjectCRFView() {
   const { projectId } = useParams<{ projectId: string }>()
-  const { projects, moduleLibrary, saveProject, saveModuleLibraryItem } = useAppStorage()
+  const { projects, moduleLibrary, saveProject, saveModuleLibraryItem, configPackages, saveConfigPackage, currentUser } = useAppStorage()
   const project = projects.find((p) => p.id === projectId)
   // 访视计划预览弹窗
   const [matrixOpen, setMatrixOpen] = useState(false)
@@ -184,11 +185,21 @@ export default function ProjectCRFView() {
   const handlePublish = () => {
     if (!confirm('发布 CRF 后将锁定编辑，数据录入人员可以开始使用。确定发布吗？')) return
     updateProject((p) => ({ ...p, crfPublished: true, crfPublishedAt: now() }))
+    // 每次发布自动写版本记录，同步到后台「配置发布」
+    const operator = currentUser?.name ?? '管理人员'
+    const payload = buildPayload(project, suggestVersion(configPackages ?? [], project.id), operator)
+    saveConfigPackage(buildRecord(project, payload, 'publish', operator, 'CRF 页发布'))
   }
 
   const handleUnpublish = () => {
     if (!confirm('取消发布后将允许重新编辑 CRF，已录入的数据不会丢失。确定取消吗？')) return
     updateProject((p) => ({ ...p, crfPublished: false, crfPublishedAt: undefined }))
+  }
+
+  // 更新：一键进入修订模式（解除只读），修改完成后可再次发布并生成新版本记录
+  const handleRevise = () => {
+    if (!confirm('进入更新模式后，CRF 将暂时回到可编辑状态，录入端在再次发布前暂停录入。确定更新吗？')) return
+    updateProject((p) => ({ ...p, crfPublished: false }))
   }
 
   return (
@@ -221,9 +232,14 @@ export default function ProjectCRFView() {
             <LayoutGrid className="w-3.5 h-3.5 mr-1" /> 访视计划
           </Button>
           {isPublished ? (
-            <Button variant="outline" size="sm" onClick={handleUnpublish}>
-              <Unlock className="w-3.5 h-3.5 mr-1" /> 取消发布
-            </Button>
+            <>
+              <Button variant="outline" size="sm" className="text-sky-600 border-sky-200 hover:bg-sky-50" onClick={handleRevise}>
+                <Pencil className="w-3.5 h-3.5 mr-1" /> 更新
+              </Button>
+              <Button variant="outline" size="sm" onClick={handleUnpublish}>
+                <Unlock className="w-3.5 h-3.5 mr-1" /> 取消发布
+              </Button>
+            </>
           ) : (
             <Button className="bg-teal-500 hover:bg-teal-600" size="sm" onClick={handlePublish} disabled={project.visits.length === 0}>
               <Rocket className="w-3.5 h-3.5 mr-1" /> 发布 CRF
@@ -235,7 +251,7 @@ export default function ProjectCRFView() {
       {isPublished && (
         <div className="bg-green-50 border border-green-200 rounded-lg px-4 py-3 text-sm text-green-700 flex items-center gap-2">
           <Lock className="w-4 h-4" />
-          CRF 已发布，当前处于只读模式。如需修改，请先取消发布。
+          CRF 已发布，当前处于只读模式。如需修改，可点击「更新」进入修订模式，或「取消发布」。
         </div>
       )}
 

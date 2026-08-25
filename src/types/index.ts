@@ -343,6 +343,7 @@ export interface Project {
   createdAt: string
   updatedAt: string
   createdBy?: string             // 创建者（管理人员ID）
+  deployEnv?: 'public' | 'intranet'  // 部署环境：公网部署 / 内网部署（默认公网）
   // CRF 设计
   visits: Visit[]
   crfModules: CRFModule[]

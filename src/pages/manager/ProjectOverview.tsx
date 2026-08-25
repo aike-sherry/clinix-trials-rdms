@@ -55,6 +55,7 @@ export default function ProjectOverview({ readOnly = false }: { readOnly?: boole
     department: '',
     targetScreening: '',
     targetEnrollment: '',
+    deployEnv: 'public' as 'public' | 'intranet',
   })
 
   const project = projects.find((p) => p.id === projectId)
@@ -158,6 +159,7 @@ export default function ProjectOverview({ readOnly = false }: { readOnly?: boole
       department: project.department ?? '',
       targetScreening: project.targetScreening != null ? String(project.targetScreening) : '',
       targetEnrollment: project.targetEnrollment != null ? String(project.targetEnrollment) : '',
+      deployEnv: project.deployEnv ?? 'public',
     })
     setEditingInfo(true)
   }
@@ -174,6 +176,7 @@ export default function ProjectOverview({ readOnly = false }: { readOnly?: boole
       department: infoForm.department.trim(),
       targetScreening: infoForm.targetScreening ? Number(infoForm.targetScreening) : undefined,
       targetEnrollment: infoForm.targetEnrollment ? Number(infoForm.targetEnrollment) : undefined,
+      deployEnv: infoForm.deployEnv,
       updatedAt: new Date().toISOString(),
     })
     setEditingInfo(false)
@@ -309,6 +312,20 @@ export default function ProjectOverview({ readOnly = false }: { readOnly?: boole
                     </SelectContent>
                   </Select>
                 </EditCell>
+                <EditCell label="部署环境">
+                  <Select
+                    value={infoForm.deployEnv}
+                    onValueChange={(v) => setInfoForm({ ...infoForm, deployEnv: v as 'public' | 'intranet' })}
+                  >
+                    <SelectTrigger className="h-8 text-sm">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="public" className="text-sm">公网部署</SelectItem>
+                      <SelectItem value="intranet" className="text-sm">内网部署</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </EditCell>
                 <EditCell label="主持单位">
                   <Input
                     className="h-8 text-sm"
@@ -355,6 +372,7 @@ export default function ProjectOverview({ readOnly = false }: { readOnly?: boole
                 <InfoCell label="立项日期" value={project.startDate?.slice(0, 10)} />
                 <InfoCell label="预算金额" value={project.budget ? `${project.budget.toLocaleString()} 元` : '—'} />
                 <InfoCell label="研究阶段" value={STAGE_FLOW[currentStage]} />
+                <InfoCell label="部署环境" value={(project.deployEnv ?? 'public') === 'public' ? '公网部署' : '内网部署'} />
                 <InfoCell label="主持单位" value={project.researchCenter} />
                 <InfoCell label="主要研究者" value={project.principalInvestigator} />
                 <InfoCell label="研究科室" value={project.department} />

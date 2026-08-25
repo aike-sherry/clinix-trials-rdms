@@ -53,6 +53,10 @@ export default function ProjectOverview() {
             <span className="font-medium">{project.department || '-'}</span>
           </div>
           <div className="flex justify-between border-b border-slate-100 pb-2">
+            <span className="text-slate-500">部署环境</span>
+            <span className="font-medium">{(project.deployEnv ?? 'public') === 'public' ? '公网部署' : '内网部署'}</span>
+          </div>
+          <div className="flex justify-between border-b border-slate-100 pb-2">
             <span className="text-slate-500">目标入组数</span>
             <span className="font-medium">{project.targetEnrollment || '-'}</span>
           </div>

@@ -97,6 +97,7 @@ export default function ProjectList() {
       researchCenter: newProject.researchCenter || '',
       department: newProject.department || '',
       status: (newProject.status as Project['status']) || 'proposal_review',
+      deployEnv: newProject.deployEnv || 'public',
       startDate: newProject.startDate,
       endDate: newProject.endDate,
       targetEnrollment: newProject.targetEnrollment || 100,
@@ -338,6 +339,33 @@ export default function ProjectList() {
                     <option key={opt.value} value={opt.value}>{opt.label}</option>
                   ))}
                 </select>
+              </div>
+            </div>
+            <div>
+              <Label className="text-sm">部署环境 <span className="text-red-500">*</span></Label>
+              <div className="grid grid-cols-2 gap-2 mt-1">
+                <button
+                  type="button"
+                  onClick={() => setNewProject({ ...newProject, deployEnv: 'public' })}
+                  className={`h-9 rounded-md border text-xs font-medium transition-colors ${
+                    (newProject.deployEnv || 'public') === 'public'
+                      ? 'bg-sky-50 border-sky-300 text-sky-700'
+                      : 'bg-white border-slate-200 text-slate-500 hover:border-slate-300'
+                  }`}
+                >
+                  公网部署（多中心研究，云端生效）
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setNewProject({ ...newProject, deployEnv: 'intranet' })}
+                  className={`h-9 rounded-md border text-xs font-medium transition-colors ${
+                    newProject.deployEnv === 'intranet'
+                      ? 'bg-teal-50 border-teal-300 text-teal-700'
+                      : 'bg-white border-slate-200 text-slate-500 hover:border-slate-300'
+                  }`}
+                >
+                  内网部署（医院局域网，配置包交付）
+                </button>
               </div>
             </div>
             <div className="grid grid-cols-2 gap-3">

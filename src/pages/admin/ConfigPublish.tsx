@@ -16,69 +16,25 @@ import {
   Package, CalendarRange, Layers, Hash, Plus, Minus, RefreshCw,
 } from 'lucide-react'
 
+import {
+  PKG_TYPE, type PackagePayload,
+  stableStringify, checksumOf, countFields,
+  buildPayload, buildRecord, suggestVersion,
+} from '@/lib/crfPackage'
+
 // ============================================================
 // 配置发布（配置中心 · 演示版）
 // 双模式交付：
-//  - 公网客户：CRF 配置一键发布（演示环境以「导出配置包」留痕）
+//  - 公网客户：CRF 配置一键发布，云端直接生效
 //  - 内网客户：导出配置包 → 医院内网系统导入 → 差异预览 → 生效
 // 配置包仅含 CRF 结构（访视/模块/字段），不含任何患者数据
 // ============================================================
-
-const PKG_TYPE = 'clini-x-crf-config-package'
-
-interface PackagePayload {
-  type: typeof PKG_TYPE
-  packageVersion: string
-  exportedAt: string
-  exportedBy: string
-  checksum: string
-  project: {
-    projectNo: string
-    name: string
-    sponsor?: string
-    principalInvestigator?: string
-    researchCenter?: string
-    department?: string
-  }
-  visits: Project['visits']
-  crfModules: Project['crfModules']
-}
 
 function genId() {
   return Math.random().toString(36).slice(2) + Date.now().toString(36)
 }
 function now() {
   return new Date().toISOString()
-}
-
-/** 稳定序列化（忽略 updatedAt 等易变字段），用于校验码与差异比对 */
-function stableStringify(v: unknown): string {
-  return JSON.stringify(v, (key, value) => {
-    if (key === 'updatedAt' || key === 'createdAt') return undefined
-    if (value && typeof value === 'object' && !Array.isArray(value)) {
-      return Object.keys(value as Record<string, unknown>)
-        .sort()
-        .reduce((acc: Record<string, unknown>, k) => {
-          acc[k] = (value as Record<string, unknown>)[k]
-          return acc
-        }, {})
-    }
-    return value
-  })
-}
-
-/** FNV-1a 简易哈希，生成配置校验码 */
-function checksumOf(payload: string): string {
-  let h = 0x811c9dc5
-  for (let i = 0; i < payload.length; i++) {
-    h ^= payload.charCodeAt(i)
-    h = Math.imul(h, 0x01000193)
-  }
-  return (h >>> 0).toString(16).padStart(8, '0').toUpperCase()
-}
-
-function countFields(p: Pick<Project, 'crfModules'>) {
-  return p.crfModules.reduce((s, m) => s + m.fields.length, 0)
 }
 
 /** 配置差异（导入预览用） */
@@ -124,6 +80,10 @@ export default function ConfigPublish() {
   const [dialogMode, setDialogMode] = useState<'publish' | 'export'>('publish')
   const [exportVersion, setExportVersion] = useState('')
   const [exportNote, setExportNote] = useState('')
+  // 部署环境子页签（发布管理内）
+  const [envTab, setEnvTab] = useState<'public' | 'intranet'>('public')
+  // 版本历史弹窗（按项目）
+  const [historyProject, setHistoryProject] = useState<Project | null>(null)
 
   // ========== 导入 ==========
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -138,49 +98,23 @@ export default function ConfigPublish() {
   const exportCount = records.filter((r) => r.mode === 'export').length
   const importCount = records.filter((r) => r.mode === 'import').length
 
-  /** 项目最新版本号（导出/导入记录中的最大值） */
+  /** 项目最新版本号（发布/导出/导入记录中的最新一条） */
   const latestVersion = (projectId: string) => {
     const list = records.filter((r) => r.projectId === projectId)
     return list.length > 0 ? list[0].version : '-'
-  }
-  /** 建议的下一版本号 */
-  const suggestVersion = (projectId: string) => {
-    const n = records.filter((r) => r.projectId === projectId).length
-    return `v1.${n}`
   }
 
   // ========== 发布 / 导出逻辑 ==========
   const openDialog = (p: Project, mode: 'publish' | 'export') => {
     setDialogMode(mode)
     setExportProject(p)
-    setExportVersion(suggestVersion(p.id))
+    setExportVersion(suggestVersion(records, p.id))
     setExportNote('')
-  }
-
-  const buildPayload = (p: Project, version: string): PackagePayload => {
-    const core = { visits: p.visits, crfModules: p.crfModules }
-    return {
-      type: PKG_TYPE,
-      packageVersion: version,
-      exportedAt: now(),
-      exportedBy: operator,
-      checksum: checksumOf(stableStringify(core)),
-      project: {
-        projectNo: p.projectNo,
-        name: p.name,
-        sponsor: p.sponsor,
-        principalInvestigator: p.principalInvestigator,
-        researchCenter: p.researchCenter,
-        department: p.department,
-      },
-      visits: p.visits,
-      crfModules: p.crfModules,
-    }
   }
 
   const confirmExport = () => {
     if (!exportProject || !exportVersion.trim()) return
-    const payload = buildPayload(exportProject, exportVersion.trim())
+    const payload = buildPayload(exportProject, exportVersion.trim(), operator)
     if (dialogMode === 'export') {
       // 内网交付：下载配置文件
       const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' })
@@ -200,22 +134,7 @@ export default function ConfigPublish() {
       })
     }
     // 留痕
-    const rec: ConfigPackage = {
-      id: genId(),
-      projectId: exportProject.id,
-      projectNo: exportProject.projectNo,
-      projectName: exportProject.name,
-      version: payload.packageVersion,
-      mode: dialogMode,
-      checksum: payload.checksum,
-      visitCount: exportProject.visits.length,
-      moduleCount: exportProject.crfModules.length,
-      fieldCount: countFields(exportProject),
-      note: exportNote.trim() || undefined,
-      createdBy: operator,
-      createdAt: now(),
-    }
-    saveConfigPackage(rec)
+    saveConfigPackage(buildRecord(exportProject, payload, dialogMode, operator, exportNote))
     setExportProject(null)
   }
 
@@ -344,16 +263,37 @@ export default function ConfigPublish() {
         ))}
       </div>
 
-      {/* ==================== 导出发布 ==================== */}
-      {tab === 'export' && (
+      {/* ==================== 发布管理（按部署环境分 TAB） ==================== */}
+      {tab === 'export' && (() => {
+        const envProjects = projects.filter((p) => (p.deployEnv ?? 'public') === envTab)
+        return (
         <Card className="bg-white">
           <CardContent className="p-0">
             <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
-              <p className="text-sm font-medium text-slate-700">选择项目：公网环境「一键发布」直接生效，内网部署「导出配置包」线下交付</p>
-              <span className="text-[11px] text-slate-400">配置包 = 项目信息 + 访视 + 模块字段 + 校验码</span>
+              <div className="flex items-center gap-1 bg-slate-100 rounded-lg p-1">
+                <button
+                  onClick={() => setEnvTab('public')}
+                  className={`flex items-center gap-1.5 px-4 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                    envTab === 'public' ? 'bg-white text-sky-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+                  }`}
+                >
+                  <Rocket className="w-3.5 h-3.5" /> 公网部署
+                </button>
+                <button
+                  onClick={() => setEnvTab('intranet')}
+                  className={`flex items-center gap-1.5 px-4 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                    envTab === 'intranet' ? 'bg-white text-teal-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+                  }`}
+                >
+                  <Download className="w-3.5 h-3.5" /> 内网部署
+                </button>
+              </div>
+              <span className="text-[11px] text-slate-400">
+                {envTab === 'public' ? '一键发布，云端直接生效' : '导出配置包，内网导入后生效'} · 配置仅含结构，不含患者数据
+              </span>
             </div>
             <div className="divide-y divide-slate-100">
-              {projects.map((p) => {
+              {envProjects.map((p) => {
                 const version = latestVersion(p.id)
                 return (
                   <div key={p.id} className="flex items-center gap-4 px-4 py-3 hover:bg-slate-50/60">
@@ -378,32 +318,45 @@ export default function ConfigPublish() {
                       </div>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
-                      <Button
-                        size="sm"
-                        className="h-8 text-xs bg-sky-500 hover:bg-sky-600"
-                        onClick={() => openDialog(p, 'publish')}
-                      >
-                        <Rocket className="w-3.5 h-3.5 mr-1" /> 一键发布
-                      </Button>
+                      {envTab === 'public' ? (
+                        <Button
+                          size="sm"
+                          className="h-8 text-xs bg-sky-500 hover:bg-sky-600"
+                          onClick={() => openDialog(p, 'publish')}
+                        >
+                          <Rocket className="w-3.5 h-3.5 mr-1" /> 一键发布
+                        </Button>
+                      ) : (
+                        <Button
+                          size="sm"
+                          className="h-8 text-xs bg-teal-500 hover:bg-teal-600"
+                          onClick={() => openDialog(p, 'export')}
+                        >
+                          <Download className="w-3.5 h-3.5 mr-1" /> 导出配置包
+                        </Button>
+                      )}
                       <Button
                         size="sm"
                         variant="outline"
-                        className="h-8 text-xs text-teal-600 border-teal-200 hover:bg-teal-50"
-                        onClick={() => openDialog(p, 'export')}
+                        className="h-8 text-xs"
+                        onClick={() => setHistoryProject(p)}
                       >
-                        <Download className="w-3.5 h-3.5 mr-1" /> 导出配置包
+                        <History className="w-3.5 h-3.5 mr-1" /> 版本历史
                       </Button>
                     </div>
                   </div>
                 )
               })}
-              {projects.length === 0 && (
-                <div className="py-14 text-center text-sm text-slate-400">暂无项目，请先在项目管理中创建</div>
+              {envProjects.length === 0 && (
+                <div className="py-14 text-center text-sm text-slate-400">
+                  {envTab === 'public' ? '暂无「公网部署」项目' : '暂无「内网部署」项目'}，可在创建项目时选择部署环境
+                </div>
               )}
             </div>
           </CardContent>
         </Card>
-      )}
+        )
+      })()}
 
       {/* ==================== 导入部署 ==================== */}
       {tab === 'import' && (
@@ -608,6 +561,60 @@ export default function ConfigPublish() {
               <Upload className="w-3.5 h-3.5 mr-1" /> 确认导入生效
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ==================== 版本历史弹窗（按项目） ==================== */}
+      <Dialog open={!!historyProject} onOpenChange={(open) => !open && setHistoryProject(null)}>
+        <DialogContent className="max-w-lg max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>版本历史{historyProject ? ` · ${historyProject.projectNo}` : ''}</DialogTitle>
+          </DialogHeader>
+          {historyProject && (() => {
+            const list = records.filter((r) => r.projectId === historyProject.id)
+            if (list.length === 0) {
+              return (
+                <div className="py-10 text-center">
+                  <History className="w-8 h-8 text-slate-200 mx-auto mb-2" />
+                  <p className="text-sm text-slate-400">该项目暂无发布 / 导出 / 导入记录</p>
+                </div>
+              )
+            }
+            return (
+              <div className="divide-y divide-slate-100">
+                {list.map((r) => (
+                  <div key={r.id} className="py-3 flex items-center gap-3">
+                    <Badge
+                      variant="outline"
+                      className={`text-[10px] h-5 px-1.5 shrink-0 ${
+                        r.mode === 'publish'
+                          ? 'bg-sky-50 text-sky-600 border-sky-200'
+                          : r.mode === 'export'
+                            ? 'bg-teal-50 text-teal-600 border-teal-200'
+                            : 'bg-violet-50 text-violet-600 border-violet-200'
+                      }`}
+                    >
+                      {r.mode === 'publish' ? '发布' : r.mode === 'export' ? '导出' : '导入'}
+                    </Badge>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <Badge variant="secondary" className="text-[10px] h-4 px-1.5">{r.version}</Badge>
+                        <span className="text-[11px] text-slate-400">
+                          {r.visitCount} 访视 · {r.moduleCount} 模块 · {r.fieldCount} 字段
+                        </span>
+                        <span className="text-[11px] text-slate-400 font-mono">校验 {r.checksum}</span>
+                      </div>
+                      {r.note && <div className="text-[11px] text-slate-500 mt-1 truncate">{r.note}</div>}
+                    </div>
+                    <div className="text-right shrink-0">
+                      <div className="text-xs text-slate-600">{r.createdBy}</div>
+                      <div className="text-[11px] text-slate-400 mt-0.5">{new Date(r.createdAt).toLocaleString('zh-CN')}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )
+          })()}
         </DialogContent>
       </Dialog>
     </div>
