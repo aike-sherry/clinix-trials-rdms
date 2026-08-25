@@ -280,13 +280,21 @@ function injectCheckDemoFlaws(data: AppStorage): boolean {
 
 function getInitialData(): AppStorage {
   try {
-    // 版本号检查：不匹配则重置缓存（保留登录会话）
+    // 版本号检查：不匹配则重置缓存（保留登录会话 + 用户配置的模块库）
     const storedVersion = localStorage.getItem(VERSION_KEY)
     let preservedUser: AppStorage['currentUser']
+    let preservedModules: AppStorage['moduleLibrary'] | undefined
     if (storedVersion !== DATA_VERSION) {
       try {
         const oldRaw = localStorage.getItem(STORAGE_KEY)
-        if (oldRaw) preservedUser = (JSON.parse(oldRaw) as AppStorage).currentUser
+        if (oldRaw) {
+          const oldParsed = JSON.parse(oldRaw) as AppStorage
+          preservedUser = oldParsed.currentUser
+          // 约定保护：版本升级重置演示数据时，用户配置的模块库完整保留，不被种子覆盖
+          if (oldParsed.moduleLibrary && oldParsed.moduleLibrary.length > 0) {
+            preservedModules = oldParsed.moduleLibrary
+          }
+        }
       } catch {
         // ignore
       }
@@ -476,7 +484,7 @@ function getInitialData(): AppStorage {
       visitData: demo.visitData,
       queries: demo.queries,
       auditLogs: demo.auditLogs,
-      moduleLibrary: getDefaultModules(),
+      moduleLibrary: preservedModules ?? getDefaultModules(),
       projectPermissions: demo.projectPermissions,
       ...(preservedUser ? { currentUser: preservedUser } : {}),
     }
