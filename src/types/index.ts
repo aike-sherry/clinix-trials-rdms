@@ -417,7 +417,7 @@ export interface AuditLog {
   userName: string
   role: UserRole
   action: 'create' | 'update' | 'delete'
-  entityType: 'patient' | 'visitData' | 'project' | 'user' | 'moduleLibrary' | 'projectPermission' | 'query'
+  entityType: 'patient' | 'visitData' | 'project' | 'user' | 'moduleLibrary' | 'projectPermission' | 'query' | 'configPackage'
   entityId: string
   entityLabel: string   // 对象中文描述，如「受试者 ZS（SCR-001）」
   summary: string       // 操作摘要
@@ -446,6 +446,23 @@ export interface DataQuery {
   closedAt?: string
 }
 
+/** CRF 配置包记录（配置中心：导出发布 / 内网导入留痕） */
+export interface ConfigPackage {
+  id: string
+  projectId: string
+  projectNo: string
+  projectName: string
+  version: string            // v1.0 / v1.1 ...
+  mode: 'export' | 'import'  // export=导出发布；import=内网导入
+  checksum: string           // 配置内容校验码
+  visitCount: number
+  moduleCount: number
+  fieldCount: number
+  note?: string
+  createdBy: string
+  createdAt: string
+}
+
 export interface AppStorage {
   users: User[]
   projects: Project[]
@@ -455,6 +472,7 @@ export interface AppStorage {
   projectPermissions: ProjectPermission[]
   auditLogs?: AuditLog[]
   queries?: DataQuery[]
+  configPackages?: ConfigPackage[]  // CRF 配置包记录（配置发布）
   // 当前登录用户（session级别，不持久化到localStorage）
   currentUser?: User
 }

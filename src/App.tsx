@@ -34,6 +34,7 @@ import CRFDesignerPage from './pages/admin/CRFDesignerPage'
 import ModuleLibraryPage from './pages/admin/ModuleLibraryPage'
 import DataIntegration from './pages/admin/DataIntegration'
 import AdminAccount from './pages/admin/Account'
+import ConfigPublish from './pages/admin/ConfigPublish'
 import AuditTrail from './pages/admin/AuditTrail'
 
 // Entry pages
@@ -104,6 +105,7 @@ export default function App() {
             <Route path="account" element={<AdminProjectAccount />} />
           </Route>
           <Route path="/admin/module-library" element={<ModuleLibraryPage />} />
+          <Route path="/admin/config-publish" element={<ConfigPublish />} />
           <Route path="/admin/crf-designer" element={<CRFDesignerPage />} />
           <Route path="/admin/customers" element={<Customers />} />
           <Route path="/admin/audit" element={<AuditTrail />} />

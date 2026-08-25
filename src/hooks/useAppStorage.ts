@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react'
-import type { AppStorage, Project, Patient, VisitData, ModuleLibraryItem, CRFField, User, ProjectPermission, AuditLog, DataQuery, ModuleKey } from '@/types'
+import type { AppStorage, Project, Patient, VisitData, ModuleLibraryItem, CRFField, User, ProjectPermission, AuditLog, DataQuery, ModuleKey, ConfigPackage } from '@/types'
 import { getDemoSeed, getDemoProjects, getDemoQueries, getDemoAuditLogs, getDemoLockedPatient } from '@/data/demoSeed'
 
 const STORAGE_KEY = 'clini_x_rdms_data'
@@ -318,6 +318,7 @@ function getInitialData(): AppStorage {
       if (!parsed.visitData) parsed.visitData = []
       if (!parsed.auditLogs) parsed.auditLogs = []
       if (!parsed.queries) parsed.queries = []
+      if (!parsed.configPackages) parsed.configPackages = []
       // 一次性迁移：为已签署但未审核的存量演示数据补充审核标记（约 70%，按记录 id 稳定判定）
       if (!localStorage.getItem(MIG_REVIEW_KEY)) {
         let changed = false
@@ -486,6 +487,7 @@ function getInitialData(): AppStorage {
       auditLogs: demo.auditLogs,
       moduleLibrary: preservedModules ?? getDefaultModules(),
       projectPermissions: demo.projectPermissions,
+      configPackages: [],
       ...(preservedUser ? { currentUser: preservedUser } : {}),
     }
     injectCheckDemoFlaws(data)
@@ -506,6 +508,7 @@ function getInitialData(): AppStorage {
     auditLogs: demo.auditLogs,
     moduleLibrary: getDefaultModules(),
     projectPermissions: demo.projectPermissions,
+    configPackages: [],
   }
   injectCheckDemoFlaws(data)
   localStorage.setItem(MIG_CHECKDEMO_KEY, '1')
@@ -774,6 +777,29 @@ export function useAppStorage() {
             queries: (prev.queries ?? []).map((q) => (q.id === query.id ? query : q)),
           }
         : { ...prev, ...audit, queries: [...(prev.queries ?? []), query] }
+      save(next)
+      return next
+    })
+  }, [])
+
+  // ========== CRF 配置包（配置发布：导出/导入留痕） ==========
+  const saveConfigPackage = useCallback((pkg: ConfigPackage) => {
+    setData((prev) => {
+      const audit = withAudit(prev, {
+        action: 'create',
+        entityType: 'configPackage',
+        entityId: pkg.id,
+        entityLabel: `配置包「${pkg.projectNo} ${pkg.version}」`,
+        summary:
+          pkg.mode === 'export'
+            ? `导出了「${pkg.projectName}」的 CRF 配置包（${pkg.version}）`
+            : `导入了「${pkg.projectName}」的 CRF 配置包（${pkg.version}）`,
+      })
+      const next: AppStorage = {
+        ...prev,
+        ...audit,
+        configPackages: [...(prev.configPackages ?? []), pkg],
+      }
       save(next)
       return next
     })
@@ -1073,6 +1099,7 @@ export function useAppStorage() {
     projectPermissions: data.projectPermissions,
     auditLogs: data.auditLogs ?? [],
     queries: data.queries ?? [],
+    configPackages: data.configPackages ?? [],
     currentUser: data.currentUser,
     refresh,
     saveProject,
@@ -1081,6 +1108,7 @@ export function useAppStorage() {
     deletePatient,
     saveVisitData,
     saveQuery,
+    saveConfigPackage,
     saveUser,
     deleteUser,
     saveProjectPermission,

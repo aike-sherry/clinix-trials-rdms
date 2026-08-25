@@ -1,7 +1,7 @@
 import { Link, useLocation, Outlet } from 'react-router'
 import {
   Home, FolderOpen, Package, Building2,
-  UserCircle, Bell, PanelLeft, PanelTop, LogOut, History
+  UserCircle, Bell, PanelLeft, PanelTop, LogOut, History, Rocket
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useState, useEffect } from 'react'
@@ -11,6 +11,7 @@ const crumbRules: CrumbRule[] = [
   { prefix: '/admin/projects/', module: '项目管理', sub: '项目详情' },
   { prefix: '/admin/projects', module: '项目管理', sub: '项目总览' },
   { prefix: '/admin/module-library', module: '模块管理', sub: '模块库' },
+  { prefix: '/admin/config-publish', module: '配置发布', sub: '配置中心' },
   { prefix: '/admin/customers', module: '客户管理', sub: '客户清单' },
   { prefix: '/admin/audit', module: '数据留痕', sub: '留痕总览' },
   { prefix: '/admin/account', module: '账号管理', sub: '账号总览' },
@@ -21,6 +22,7 @@ const navItems = [
   { path: '/admin', label: '首页', icon: Home },
   { path: '/admin/projects', label: '项目管理', icon: FolderOpen },
   { path: '/admin/module-library', label: '模块管理', icon: Package },
+  { path: '/admin/config-publish', label: '配置发布', icon: Rocket },
   { path: '/admin/customers', label: '客户管理', icon: Building2 },
   { path: '/admin/audit', label: '数据留痕', icon: History },
   { path: '/admin/account', label: '账号管理', icon: UserCircle },

@@ -40,6 +40,7 @@ const ENTITY_LABELS: Record<AuditLog['entityType'], string> = {
   moduleLibrary: '模块库',
   projectPermission: '项目授权',
   query: '数据疑问',
+  configPackage: '配置包',
 }
 
 const ROLE_LABELS: Record<UserRole, string> = {
