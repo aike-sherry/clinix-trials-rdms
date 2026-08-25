@@ -453,7 +453,7 @@ export interface ConfigPackage {
   projectNo: string
   projectName: string
   version: string            // v1.0 / v1.1 ...
-  mode: 'export' | 'import'  // export=导出发布；import=内网导入
+  mode: 'publish' | 'export' | 'import'  // publish=公网一键发布；export=导出配置包（内网交付）；import=内网导入
   checksum: string           // 配置内容校验码
   visitCount: number
   moduleCount: number

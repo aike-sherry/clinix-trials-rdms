@@ -108,7 +108,7 @@ function diffPackage(current: Project | undefined, pkg: PackagePayload): PkgDiff
 
 type TabKey = 'export' | 'import' | 'records'
 const TABS: { key: TabKey; label: string; icon: typeof Rocket }[] = [
-  { key: 'export', label: '导出发布', icon: Rocket },
+  { key: 'export', label: '发布管理', icon: Rocket },
   { key: 'import', label: '导入部署（内网）', icon: Upload },
   { key: 'records', label: '版本记录', icon: History },
 ]
@@ -119,8 +119,9 @@ export default function ConfigPublish() {
 
   const [tab, setTab] = useState<TabKey>('export')
 
-  // ========== 导出 ==========
+  // ========== 发布 / 导出 ==========
   const [exportProject, setExportProject] = useState<Project | null>(null)
+  const [dialogMode, setDialogMode] = useState<'publish' | 'export'>('publish')
   const [exportVersion, setExportVersion] = useState('')
   const [exportNote, setExportNote] = useState('')
 
@@ -133,6 +134,7 @@ export default function ConfigPublish() {
     () => [...(configPackages ?? [])].sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
     [configPackages]
   )
+  const publishCount = records.filter((r) => r.mode === 'publish').length
   const exportCount = records.filter((r) => r.mode === 'export').length
   const importCount = records.filter((r) => r.mode === 'import').length
 
@@ -147,8 +149,9 @@ export default function ConfigPublish() {
     return `v1.${n}`
   }
 
-  // ========== 导出逻辑 ==========
-  const openExport = (p: Project) => {
+  // ========== 发布 / 导出逻辑 ==========
+  const openDialog = (p: Project, mode: 'publish' | 'export') => {
+    setDialogMode(mode)
     setExportProject(p)
     setExportVersion(suggestVersion(p.id))
     setExportNote('')
@@ -178,14 +181,24 @@ export default function ConfigPublish() {
   const confirmExport = () => {
     if (!exportProject || !exportVersion.trim()) return
     const payload = buildPayload(exportProject, exportVersion.trim())
-    // 下载配置文件
-    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `CRF配置包_${exportProject.projectNo}_${payload.packageVersion}.json`
-    a.click()
-    URL.revokeObjectURL(url)
+    if (dialogMode === 'export') {
+      // 内网交付：下载配置文件
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `CRF配置包_${exportProject.projectNo}_${payload.packageVersion}.json`
+      a.click()
+      URL.revokeObjectURL(url)
+    } else {
+      // 公网一键发布：直接生效（标记 CRF 已发布）
+      saveProject({
+        ...exportProject,
+        crfPublished: true,
+        crfPublishedAt: exportProject.crfPublishedAt ?? now(),
+        updatedAt: now(),
+      })
+    }
     // 留痕
     const rec: ConfigPackage = {
       id: genId(),
@@ -193,7 +206,7 @@ export default function ConfigPublish() {
       projectNo: exportProject.projectNo,
       projectName: exportProject.name,
       version: payload.packageVersion,
-      mode: 'export',
+      mode: dialogMode,
       checksum: payload.checksum,
       visitCount: exportProject.visits.length,
       moduleCount: exportProject.crfModules.length,
@@ -336,10 +349,11 @@ export default function ConfigPublish() {
       </Card>
 
       {/* 统计卡 */}
-      <div className="grid grid-cols-4 gap-4">
+      <div className="grid grid-cols-5 gap-4">
         <StatCard label="配置项目" value={projects.length} unit="个" sub="当前在管研究" icon={Package} gradient="from-blue-500 to-blue-600" />
-        <StatCard label="累计导出" value={exportCount} unit="次" sub="公网发布 / 配置包导出" icon={Download} gradient="from-teal-500 to-emerald-600" />
-        <StatCard label="累计导入" value={importCount} unit="次" sub="内网环境配置包导入" icon={Upload} gradient="from-violet-500 to-purple-600" />
+        <StatCard label="一键发布" value={publishCount} unit="次" sub="公网环境直接生效" icon={Rocket} gradient="from-sky-500 to-blue-600" />
+        <StatCard label="配置包导出" value={exportCount} unit="次" sub="内网交付 / 配置备份" icon={Download} gradient="from-teal-500 to-emerald-600" />
+        <StatCard label="配置包导入" value={importCount} unit="次" sub="内网环境配置包导入" icon={Upload} gradient="from-violet-500 to-purple-600" />
         <StatCard label="版本记录" value={records.length} unit="条" sub={records.length > 0 ? `最近：${records[0].projectNo} ${records[0].version}` : '暂无发布记录'} icon={History} gradient="from-amber-500 to-orange-500" />
       </div>
 
@@ -363,7 +377,7 @@ export default function ConfigPublish() {
         <Card className="bg-white">
           <CardContent className="p-0">
             <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
-              <p className="text-sm font-medium text-slate-700">选择项目，导出 CRF 配置包（公网发布留痕 / 内网部署交付）</p>
+              <p className="text-sm font-medium text-slate-700">选择项目：公网环境「一键发布」直接生效，内网部署「导出配置包」线下交付</p>
               <span className="text-[11px] text-slate-400">配置包 = 项目信息 + 访视 + 模块字段 + 校验码</span>
             </div>
             <div className="divide-y divide-slate-100">
@@ -391,13 +405,23 @@ export default function ConfigPublish() {
                         <span>最新版本：<span className="text-slate-600 font-medium">{version}</span></span>
                       </div>
                     </div>
-                    <Button
-                      size="sm"
-                      className="h-8 text-xs bg-teal-500 hover:bg-teal-600 shrink-0"
-                      onClick={() => openExport(p)}
-                    >
-                      <Download className="w-3.5 h-3.5 mr-1" /> 导出配置包
-                    </Button>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <Button
+                        size="sm"
+                        className="h-8 text-xs bg-sky-500 hover:bg-sky-600"
+                        onClick={() => openDialog(p, 'publish')}
+                      >
+                        <Rocket className="w-3.5 h-3.5 mr-1" /> 一键发布
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-8 text-xs text-teal-600 border-teal-200 hover:bg-teal-50"
+                        onClick={() => openDialog(p, 'export')}
+                      >
+                        <Download className="w-3.5 h-3.5 mr-1" /> 导出配置包
+                      </Button>
+                    </div>
                   </div>
                 )
               })}
@@ -449,12 +473,12 @@ export default function ConfigPublish() {
           <CardContent className="p-0">
             <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
               <p className="text-sm font-medium text-slate-700">配置包版本记录</p>
-              <span className="text-[11px] text-slate-400">每次导出 / 导入自动留痕，可回溯校验码</span>
+              <span className="text-[11px] text-slate-400">每次发布 / 导出 / 导入自动留痕，可回溯校验码</span>
             </div>
             {records.length === 0 ? (
               <div className="py-14 text-center">
                 <History className="w-8 h-8 text-slate-200 mx-auto mb-2" />
-                <p className="text-sm text-slate-400">暂无版本记录，导出或导入配置包后在此展示</p>
+                <p className="text-sm text-slate-400">暂无版本记录，发布、导出或导入配置后在此展示</p>
               </div>
             ) : (
               <div className="divide-y divide-slate-100">
@@ -463,12 +487,14 @@ export default function ConfigPublish() {
                     <Badge
                       variant="outline"
                       className={`text-[10px] h-5 px-1.5 shrink-0 ${
-                        r.mode === 'export'
-                          ? 'bg-teal-50 text-teal-600 border-teal-200'
-                          : 'bg-violet-50 text-violet-600 border-violet-200'
+                        r.mode === 'publish'
+                          ? 'bg-sky-50 text-sky-600 border-sky-200'
+                          : r.mode === 'export'
+                            ? 'bg-teal-50 text-teal-600 border-teal-200'
+                            : 'bg-violet-50 text-violet-600 border-violet-200'
                       }`}
                     >
-                      {r.mode === 'export' ? '导出' : '导入'}
+                      {r.mode === 'publish' ? '发布' : r.mode === 'export' ? '导出' : '导入'}
                     </Badge>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
@@ -496,11 +522,11 @@ export default function ConfigPublish() {
         </Card>
       )}
 
-      {/* ==================== 导出确认弹窗 ==================== */}
+      {/* ==================== 发布 / 导出确认弹窗 ==================== */}
       <Dialog open={!!exportProject} onOpenChange={(open) => !open && setExportProject(null)}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>导出 CRF 配置包</DialogTitle>
+            <DialogTitle>{dialogMode === 'publish' ? '一键发布 CRF 配置' : '导出 CRF 配置包（内网交付）'}</DialogTitle>
           </DialogHeader>
           {exportProject && (
             <div className="space-y-4 py-2">
@@ -510,6 +536,15 @@ export default function ConfigPublish() {
                   <span className="text-slate-400">内容：</span>
                   {exportProject.visits.length} 次访视 · {exportProject.crfModules.length} 个模块 · {countFields(exportProject)} 个字段
                 </div>
+              </div>
+              <div className={`text-xs rounded-lg px-3 py-2 border ${
+                dialogMode === 'publish'
+                  ? 'bg-sky-50 text-sky-700 border-sky-100'
+                  : 'bg-teal-50 text-teal-700 border-teal-100'
+              }`}>
+                {dialogMode === 'publish'
+                  ? '公网部署模式：发布后 CRF 配置直接在云端生效，无需下载文件，管理端与录入端即时可用'
+                  : '内网部署模式：导出 .json 配置包后，由实施人员带至医院内网环境，在「导入部署」页签导入生效'}
               </div>
               <div>
                 <Label className="text-sm">版本号 <span className="text-red-500">*</span></Label>
@@ -529,9 +564,15 @@ export default function ConfigPublish() {
           )}
           <DialogFooter>
             <Button variant="outline" onClick={() => setExportProject(null)}>取消</Button>
-            <Button className="bg-teal-500 hover:bg-teal-600" disabled={!exportVersion.trim()} onClick={confirmExport}>
-              <Download className="w-3.5 h-3.5 mr-1" /> 导出并留痕
-            </Button>
+            {dialogMode === 'publish' ? (
+              <Button className="bg-sky-500 hover:bg-sky-600" disabled={!exportVersion.trim()} onClick={confirmExport}>
+                <Rocket className="w-3.5 h-3.5 mr-1" /> 确认发布
+              </Button>
+            ) : (
+              <Button className="bg-teal-500 hover:bg-teal-600" disabled={!exportVersion.trim()} onClick={confirmExport}>
+                <Download className="w-3.5 h-3.5 mr-1" /> 导出并留痕
+              </Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>

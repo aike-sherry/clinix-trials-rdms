@@ -791,8 +791,10 @@ export function useAppStorage() {
         entityId: pkg.id,
         entityLabel: `配置包「${pkg.projectNo} ${pkg.version}」`,
         summary:
-          pkg.mode === 'export'
-            ? `导出了「${pkg.projectName}」的 CRF 配置包（${pkg.version}）`
+          pkg.mode === 'publish'
+            ? `一键发布了「${pkg.projectName}」的 CRF 配置（${pkg.version}，公网生效）`
+            : pkg.mode === 'export'
+            ? `导出了「${pkg.projectName}」的 CRF 配置包（${pkg.version}，内网交付）`
             : `导入了「${pkg.projectName}」的 CRF 配置包（${pkg.version}）`,
       })
       const next: AppStorage = {
