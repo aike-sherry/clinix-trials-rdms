@@ -12,8 +12,8 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from '@/components/ui/dialog'
 import {
-  Rocket, Globe, Building2, Download, Upload, FileJson, History,
-  ShieldCheck, Package, CalendarRange, Layers, Hash, Plus, Minus, RefreshCw,
+  Rocket, Download, Upload, FileJson, History,
+  Package, CalendarRange, Layers, Hash, Plus, Minus, RefreshCw,
 } from 'lucide-react'
 
 // ============================================================
@@ -320,34 +320,6 @@ export default function ConfigPublish() {
 
   return (
     <div className="space-y-5">
-      {/* 双模式说明 */}
-      <Card className="bg-gradient-to-r from-teal-50/80 via-white to-white border-teal-100">
-        <CardContent className="p-4 flex items-start gap-4">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-teal-500 to-emerald-600 flex items-center justify-center shrink-0 shadow-md">
-            <Rocket className="w-5 h-5 text-white" />
-          </div>
-          <div className="flex-1">
-            <h2 className="text-sm font-semibold text-slate-800">配置中心 · 一套后台，两种交付</h2>
-            <p className="text-xs text-slate-400 mt-1 leading-relaxed">
-              CRF 配置（访视 / 模块 / 字段）在这里统一设计，配置包仅含结构、不含任何患者数据：
-            </p>
-            <div className="flex items-center gap-6 mt-2.5">
-              <div className="flex items-center gap-2 text-xs text-slate-600">
-                <Globe className="w-3.5 h-3.5 text-sky-500" />
-                <span><span className="font-medium">公网 / 多中心研究</span>：一键发布，云端直接生效</span>
-              </div>
-              <div className="flex items-center gap-2 text-xs text-slate-600">
-                <Building2 className="w-3.5 h-3.5 text-teal-600" />
-                <span><span className="font-medium">医院内网部署</span>：导出配置包 → 内网导入 → 差异预览后生效</span>
-              </div>
-            </div>
-          </div>
-          <div className="flex items-center gap-1.5 text-[11px] text-teal-600 bg-teal-50 border border-teal-100 rounded-full px-2.5 py-1 shrink-0">
-            <ShieldCheck className="w-3.5 h-3.5" /> 配置不含患者数据
-          </div>
-        </CardContent>
-      </Card>
-
       {/* 统计卡 */}
       <div className="grid grid-cols-5 gap-4">
         <StatCard label="配置项目" value={projects.length} unit="个" sub="当前在管研究" icon={Package} gradient="from-blue-500 to-blue-600" />

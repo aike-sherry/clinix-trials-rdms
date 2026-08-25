@@ -170,8 +170,19 @@ export default function Customers() {
 
   return (
     <div className="space-y-5">
-      {/* 操作栏 */}
-      <div className="flex items-center justify-end">
+      {/* 统计卡片（全站统一 StatCard） */}
+      <div className="grid grid-cols-4 gap-4">
+        <StatCard label="客户总数" value={totalCount} unit="家" sub="全部合作客户" icon={Building2} gradient="from-blue-500 to-blue-600" />
+        <StatCard label="已开通账号" value={activeCount} unit="家" sub={`开通率 ${totalCount > 0 ? Math.round((activeCount / totalCount) * 100) : 0}%`} icon={UserCheck} gradient="from-teal-500 to-emerald-600" />
+        <StatCard label="待开通" value={pendingCount} unit="家" sub="待授权开通账号" icon={Clock} gradient="from-amber-500 to-orange-500" />
+        <StatCard label="关联项目" value={relatedProjects} unit="项" sub="客户名下研究项目" icon={FolderOpen} gradient="from-purple-500 to-violet-600" />
+      </div>
+
+      {/* 客户详情 */}
+      <div className="flex items-center justify-between">
+        <h3 className="text-sm font-semibold text-slate-800 flex items-center gap-1.5">
+          <Building2 className="w-4 h-4 text-sky-500" /> 客户详情
+        </h3>
         <div className="flex items-center gap-3">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
@@ -197,14 +208,6 @@ export default function Customers() {
             <Plus className="w-4 h-4 mr-1" /> 新建客户
           </Button>
         </div>
-      </div>
-
-      {/* 统计卡片（全站统一 StatCard） */}
-      <div className="grid grid-cols-4 gap-4">
-        <StatCard label="客户总数" value={totalCount} unit="家" sub="全部合作客户" icon={Building2} gradient="from-blue-500 to-blue-600" />
-        <StatCard label="已开通账号" value={activeCount} unit="家" sub={`开通率 ${totalCount > 0 ? Math.round((activeCount / totalCount) * 100) : 0}%`} icon={UserCheck} gradient="from-teal-500 to-emerald-600" />
-        <StatCard label="待开通" value={pendingCount} unit="家" sub="待授权开通账号" icon={Clock} gradient="from-amber-500 to-orange-500" />
-        <StatCard label="关联项目" value={relatedProjects} unit="项" sub="客户名下研究项目" icon={FolderOpen} gradient="from-purple-500 to-violet-600" />
       </div>
 
       {/* 客户列表 */}
